@@ -1,0 +1,591 @@
+openapi: 3.0.3
+info:
+  title: AI Inference Control API
+  version: 2.0.0
+  description: Manage GPU profiles, catalog downloads, LLM-planned image generation, and runtime status.
+servers:
+  - url: http://192.168.50.100:8090
+    description: GPU box (direct)
+  - url: http://127.0.0.1:8090
+    description: Mac proxy (LAN)
+paths:
+  /api/v1/status:
+    get:
+      summary: Runtime and GPU status
+      responses:
+        "200":
+          description: Load state, active profile, GPU memory
+  /api/v1/models:
+    get:
+      summary: Catalog download status on disk
+      responses:
+        "200":
+          description: Bundle list with complete/partial/missing
+  /api/v1/capabilities:
+    get:
+      summary: Image generation presets, modes, LoRA readiness, LTX video, and workflows
+      responses:
+        "200":
+          description: Presets list with ready flags, supported modes, loras, ltxVideo, workflows.characterMaster
+  /api/v1/generate:
+    post:
+      summary: Queue LLM-planned image generation (async)
+      description: |
+        Multi-prompt batch (`prompts[]`): planner loads Gemma once for text and vision,
+        then Comfy executes all items sequentially (2 GPU profile switches total).
+        Same-prompt shorthand (`prompt` + `count`) expands to N items with seed offsets.
+        If both `prompts` and `prompt` are sent, `prompts` takes precedence.
+        Partial failures continue remaining items.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompts:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  description: Multi-prompt batch (preferred when set)
+                  items:
+                    type: object
+                    properties:
+                      prompt:
+                        type: string
+                      image:
+                        type: string
+                      plan:
+                        type: object
+                      seed:
+                        type: integer
+                      width:
+                        type: integer
+                      height:
+                        type: integer
+                      fastGenMode:
+                        type: boolean
+                      steps:
+                        type: integer
+                        nullable: true
+                        description: Omit or null for auto; integer to override planner/preset
+                prompt:
+                  type: string
+                  description: Natural language image request (shorthand mode)
+                image:
+                  type: string
+                  description: Optional base64 or data URL reference image
+                plan:
+                  type: object
+                  description: Optional explicit plan (bypasses LLM planner)
+                seed:
+                  type: integer
+                width:
+                  type: integer
+                height:
+                  type: integer
+                count:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 1
+                  description: Same-prompt batch size (shorthand mode)
+                fastGenMode:
+                  type: boolean
+                  nullable: true
+                  description: Omit or null for auto; true forces Lightning 4-step defaults when steps is auto
+                steps:
+                  type: integer
+                  nullable: true
+                  description: Omit or null for auto; integer to override planner/preset steps
+                upscale:
+                  type: boolean
+                  nullable: true
+                  description: Omit or null for auto; true adds 4× RealESRGAN after generation
+      responses:
+        "202":
+          description: Job queued with items[] (planning → switching → running)
+        "422":
+          description: Validation error
+  /api/v1/generate/{job_id}/images/{filename}:
+    get:
+      summary: Download a persisted job output image
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PNG/JPEG file from jobs/{job_id}/images/
+        "404":
+          description: Unknown job or image
+  /api/v1/generate/{job_id}:
+    get:
+      summary: Poll generation job status and output URLs
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job with total/completedCount/failedCount, items[] per-prompt status and images[] urls
+        "404":
+          description: Unknown job
+  /api/v1/workflows/character-master:
+    post:
+      summary: Queue WF_01 Character Master candidates (async)
+      description: |
+        Generate locked character-identity candidates with Qwen Image 2512.
+        MASTER uses full-quality inference (no Lightning/Turbo). DRAFT may use Lightning.
+        Planner enriches the prompt only; preset and LoRAs are locked by quality.
+        After completion, POST .../select to promote a candidate to CHARACTER_MASTER.png.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [characterDescription]
+              properties:
+                characterDescription:
+                  type: string
+                style:
+                  type: string
+                quality:
+                  type: string
+                  enum: [draft, master]
+                  default: master
+                aspectRatio:
+                  type: string
+                  enum: ["9:16", "16:9", "1:1", "4:5"]
+                  default: "9:16"
+                width:
+                  type: integer
+                  minimum: 256
+                  maximum: 4096
+                height:
+                  type: integer
+                  minimum: 256
+                  maximum: 4096
+                seed:
+                  type: integer
+                candidateCount:
+                  type: integer
+                  minimum: 1
+                  maximum: 8
+                image:
+                  type: string
+                  description: Optional base64 or data URL reference (img2img)
+                denoise:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  description: Requires image; default 0.65
+                realismLora:
+                  description: Optional realism LoRA strength 0-1; default off
+                  oneOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 1
+                    - type: boolean
+                upscale:
+                  type: boolean
+                  default: false
+                characterId:
+                  type: string
+      responses:
+        "202":
+          description: Job queued (planning → switching → running)
+        "409":
+          description: Models missing or ComfyUI not loaded
+        "422":
+          description: Validation error or MASTER Lightning/Turbo forbidden
+  /api/v1/workflows/character-master/{job_id}:
+    get:
+      summary: Poll Character Master job status
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job with candidates[], selected, metadata
+        "404":
+          description: Unknown job
+  /api/v1/workflows/character-master/{job_id}/images/{filename}:
+    get:
+      summary: Download a Character Master candidate image
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PNG from jobs/{job_id}/images/
+        "404":
+          description: Unknown job or image
+  /api/v1/workflows/character-master/{job_id}/select:
+    post:
+      summary: Promote a candidate to CHARACTER_MASTER
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [candidateIndex]
+              properties:
+                candidateIndex:
+                  type: integer
+                  minimum: 0
+                  maximum: 7
+      responses:
+        "200":
+          description: Job with selected asset pointers
+        "404":
+          description: Unknown job or candidate
+  /api/v1/assets/characters/{character_id}:
+    get:
+      summary: Load a persisted character asset
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Character directory, candidates, metadata
+        "404":
+          description: Unknown character
+  /api/v1/assets/characters/{character_id}/files/{filename}:
+    get:
+      summary: Download CHARACTER_MASTER.png or a candidate file
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Image file
+        "404":
+          description: Unknown file
+  /api/v1/upscale:
+    post:
+      summary: Queue RealESRGAN upscale job (async)
+      description: |
+        Upscale an uploaded image or a prior generate job output via ComfyUI RealESRGAN.
+        No LLM planner — loads Comfy directly.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  description: Base64 or data URL (required unless sourceJobId+sourceFilename)
+                sourceJobId:
+                  type: string
+                  description: Prior generate job UUID
+                sourceFilename:
+                  type: string
+                  description: Filename from jobs/{sourceJobId}/images/
+                scale:
+                  type: integer
+                  enum: [2, 4]
+                  default: 4
+      responses:
+        "202":
+          description: Upscale job queued
+        "404":
+          description: Source image not found
+        "422":
+          description: Validation error
+  /api/v1/upscale/{job_id}/images/{filename}:
+    get:
+      summary: Download a persisted upscale job output image
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PNG/JPEG file from jobs/{job_id}/images/
+        "404":
+          description: Unknown job or image
+  /api/v1/upscale/{job_id}:
+    get:
+      summary: Poll upscale job status and output URLs
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job with scale, plan, images[] urls
+        "404":
+          description: Unknown job
+  /api/v1/ltx-video:
+    post:
+      summary: Queue LTX-2.5 video with synchronized audio
+      description: |
+        Text-to-video or image-to-video via ComfyUI LTX on port 8189.
+        Prompts are sent verbatim unless `promptEnhance=true` (LTX Studio TextGenerateLTX2Prompt).
+        audioPrompt is strongly recommended — without it the model may invent background music.
+        Speed **quality** or preset **ltx_studio** runs the same 2-stage refine pipeline as
+        ComfyUI `LTX-2.5-Quality-T2V.json` (requires `ltx-2.5-studio` bundle).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum: [t2v, i2v]
+                  default: t2v
+                prompt:
+                  type: string
+                audioPrompt:
+                  type: string
+                  description: Explicit sound design; use "silent, no sound" for silence
+                image:
+                  type: string
+                  description: Base64 or data URL (required for i2v)
+                sourceJobId:
+                  type: string
+                sourceFilename:
+                  type: string
+                duration:
+                  type: number
+                  minimum: 1
+                  maximum: 10
+                preset:
+                  type: string
+                  description: ltx_reel | ltx_landscape | ltx_square | ltx_quality | ltx_studio | ltx_fast
+                orientation:
+                  type: string
+                  enum: [portrait, landscape, square]
+                  description: Sets width×height when preset is not explicit
+                speed:
+                  type: string
+                  enum: [fast, standard, quality]
+                  description: fast=12 steps; standard=20 steps; quality=28 steps+LTX Studio refine (HD resolution for all)
+                plan:
+                  type: object
+                  description: Explicit plan (bypasses preset merge)
+                seed:
+                  type: integer
+                width:
+                  type: integer
+                  minimum: 256
+                  maximum: 2048
+                height:
+                  type: integer
+                  minimum: 256
+                  maximum: 2048
+                length:
+                  type: integer
+                  minimum: 17
+                  maximum: 241
+                  description: Frame count; snapped to 8k+1 (duration × fps + 1)
+                fps:
+                  type: number
+                steps:
+                  type: integer
+                videoCfg:
+                  type: number
+                  description: Distilled LTX uses 1.0; higher values over-saturate and blur
+                audioCfg:
+                  type: number
+                  description: Distilled LTX uses 1.0
+                negativePrompt:
+                  type: string
+                samplerName:
+                  type: string
+                maxShift:
+                  type: number
+                baseShift:
+                  type: number
+                terminal:
+                  type: number
+                stretch:
+                  type: boolean
+                strength:
+                  type: number
+                  description: I2V image conditioning strength (0–1)
+                refine:
+                  type: boolean
+                  description: Enable 2-stage latent upscale refine
+                refineSteps:
+                  type: integer
+                refineDenoise:
+                  type: number
+                tiledDecode:
+                  type: boolean
+                  description: Use tiled VAE decode (lower VRAM)
+                promptEnhance:
+                  type: boolean
+                  description: |
+                    Expand prompt with LTX Studio TextGenerateLTX2Prompt (same as ComfyUI prompt_enhance).
+                    Requires ltx-2.5-prompt-enhancer bundle.
+                cameraMotion:
+                  type: string
+                  enum: [auto, none, dolly_in, dolly_out, dolly_left, dolly_right, jib_up, jib_down, static]
+                  description: Official camera LoRA. auto picks from the prompt. Do not apply the distilled LoRA on the distilled transformer.
+                referenceVideo:
+                  type: string
+                  description: Base64 or data URL of a reference video (required for IC-LoRA / Detailer)
+                icLora:
+                  type: string
+                  enum: [auto, none, union, detailer]
+                  description: Union Control or Detailer IC-LoRA. Skipped unless referenceVideo is set.
+                controlType:
+                  type: string
+                  enum: [auto, depth, canny, pose]
+                  description: Annotator for Union Control. auto picks from the prompt (default depth).
+                detailer:
+                  type: boolean
+                  description: Also apply the Detailer IC-LoRA when a reference video is present
+                loraStrength:
+                  type: number
+                  minimum: 0
+                  maximum: 2
+                  description: Camera LoRA strength (default 1.0)
+                icLoraStrength:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  description: IC-LoRA strength (default 1.0)
+      responses:
+        "202":
+          description: Job queued (switching → load_models → encode → sample → refine → decode → export)
+        "422":
+          description: Validation error
+  /api/v1/ltx-video/{job_id}/videos/{filename}:
+    get:
+      summary: Download a persisted LTX MP4 (with audio)
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: MP4 from jobs/{job_id}/videos/
+        "404":
+          description: Unknown job or video
+  /api/v1/ltx-video/{job_id}:
+    get:
+      summary: Poll LTX video job status
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job with plan, videos[], status, phase
+        "404":
+          description: Unknown job
+  /api/v1/downloads:
+    get:
+      summary: Download job status
+      responses:
+        "200":
+          description: idle | running | completed | failed plus log tail
+    post:
+      summary: Start background catalog download
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "202":
+          description: Download started
+        "409":
+          description: Download already running
+  /api/v1/profile:
+    put:
+      summary: Switch to one GPU profile (exclusive)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  enum: [llama-fast, gemma, comfy, comfy-ltx]
+      responses:
+        "200":
+          description: Profile started
+    delete:
+      summary: Stop all inference profiles
+      responses:
+        "204":
+          description: GPU idle
+  /api/v1/urls:
+    get:
+      summary: LAN endpoint URLs
+      responses:
+        "200":
+          description: llm, comfy, comfyLtx, control URLs

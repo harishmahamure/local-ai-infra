@@ -1,0 +1,15 @@
+[Unit]
+Description=Catalog model download (oneshot, survives SSH disconnect)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=AI_CONTROL=@HOME@/ai-inference/control
+EnvironmentFile=-@HOME@/ai-inference/config/download.env
+ExecStart=@HOME@/ai-inference/control/scripts/remote/run-download.sh
+TimeoutStartSec=infinity
+StandardOutput=append:@HOME@/ai-inference/logs/download.log
+StandardError=append:@HOME@/ai-inference/logs/download.log
+
+[Install]
+WantedBy=default.target

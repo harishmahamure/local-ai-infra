@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# Mac CLI — control GPU box via HTTP API (proxy or direct) and SSH for bootstrap/sync.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+[[ -f "$ROOT/.env" ]] && source "$ROOT/.env"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/gpu_paths.sh"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/api_client.sh"
+
+HOST="${REMOTE_HOST:-gpu-box}"
+REMOTE_CONTROL="$(gpu_control_ssh)"
+
+ssh_gpu() {
+  ssh "$HOST" "$@"
+}
+
+run_control_ssh() {
+  ssh_gpu "bash ${REMOTE_CONTROL}/scripts/remote/control.sh $*"
+}
+
+usage() {
+  cat <<EOF
+Usage: ai <command> [profile]
+
+Commands:
+  status              Load state (LOADED/STOPPED), active profile, downloads
+  models              Download status only (files on disk)
+  start <profile>     Unload others, start profile, wait for health
+  switch <profile>    Alias for start
+  stop                Stop all GPU services (unload models)
+  url                 Print LAN endpoints
+  ui                  Open control UI in browser
+  inventory           Remote hardware/software inventory
+  sync                Push control repo to GPU box
+  bootstrap [--reseed-env]  Remote setup + enable control API + Mac proxy
+  download [id...]    Start background download on GPU (returns immediately)
+
+Profiles:
+  llama-fast          Qwen3.6-35B-A3B RotorQuant + vision on :8080
+  gemma               Gemma 4 E4B text + vision planner on :8080
+  comfy               ComfyUI on :8188
+  comfy-ltx           ComfyUI LTX-2.5 on :8189
+
+Control UI/API: \${CONTROL_URL:-http://127.0.0.1:8090}
+Other services: PUT /api/v1/profile  POST /api/v1/downloads
+
+Examples:
+  ai start llama-fast
+  ai switch comfy
+  ai download
+  ai ui
+EOF
+}
+
+push_download_env() {
+  local token=""
+  if [[ -f "$ROOT/.env" ]]; then
+    # shellcheck disable=SC1091
+    source "$ROOT/.env"
+    token="${HF_TOKEN:-}"
+  fi
+  if [[ -z "$token" ]]; then
+    echo "Warning: HF_TOKEN not set in $ROOT/.env — gated models (LTX-2.5) will fail." >&2
+  fi
+  # Write absolute Linux paths on the GPU (never Mac-expanded $HOME from this machine).
+  ssh_gpu "TOKEN=$(printf '%q' "$token") bash -s" <<'REMOTE'
+set -euo pipefail
+mkdir -p "$HOME/ai-inference/config"
+cat > "$HOME/ai-inference/config/download.env" <<EOF
+HF_TOKEN=${TOKEN}
+COMFYUI_ROOT=${HOME}/ComfyUI/models
+LLAMACPP_MODELS=${HOME}/ai-inference/models/llamacpp
+HF_HOME=${HOME}/.cache/huggingface
+EOF
+REMOTE
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  status)
+    status_json="$(api_get /api/v1/status)"
+    print_status_text "$status_json"
+    echo
+    print_models_text "$(api_get /api/v1/models)"
+    ;;
+  models)
+    print_models_text "$(api_get /api/v1/models)"
+    ;;
+  start|switch)
+    profile="${1:-}"
+    [[ -n "$profile" ]] || { echo "Profile required" >&2; usage; exit 1; }
+    api_mutate PUT /api/v1/profile "{\"id\":\"${profile}\"}" >/dev/null
+    echo "Profile ${profile} started (exclusive GPU)."
+    api_get /api/v1/status | python3 -c "import json,sys; s=json.load(sys.stdin); print(s.get('activeUrl') or 'waiting...')"
+    ;;
+  stop)
+    api_mutate DELETE /api/v1/profile >/dev/null || true
+    echo "All GPU services stopped (UNLOADED)."
+    ;;
+  url)
+    api_get /api/v1/urls | python3 -c "import json,sys; d=json.load(sys.stdin); print('LLM:   '+d.get('llm','')); print('Comfy: '+d.get('comfy','')); print('LTX:   '+d.get('comfyLtx','')); print('Ctrl:  '+d.get('control',''))"
+    ;;
+  ui)
+    base="$(api_base)" || base="${CONTROL_URL:-http://127.0.0.1:8090}"
+    echo "Control UI: ${base}/"
+    if command -v open >/dev/null; then
+      open "${base}/"
+    fi
+    ;;
+  download)
+    push_download_env
+    body='{"ids":[]}'
+    if (($# > 0)); then
+      ids_json="$(printf '%s\n' "$@" | python3 -c "import json,sys; print(json.dumps({'ids':[l.strip() for l in sys.stdin if l.strip()]}))")"
+      body="$ids_json"
+    fi
+    if resp="$(api_mutate POST /api/v1/downloads "$body" 2>&1)"; then
+      echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"Download {d.get('status')} (background on GPU). Check: ai models or UI.\")"
+    else
+      echo "$resp" | python3 -c "import json,sys; 
+try:
+ d=json.load(sys.stdin)
+ print(d.get('error',{}).get('message','download failed'))
+except Exception:
+ print(sys.stdin.read() or 'download failed')" 2>/dev/null || echo "$resp"
+      exit 1
+    fi
+    ;;
+  inventory)
+    bash "$ROOT/scripts/inventory_remote.sh"
+    ;;
+  sync)
+    bash "$ROOT/scripts/sync_to_remote.sh"
+    push_download_env
+    ;;
+  bootstrap)
+    reseed_env=0
+    if [[ "${1:-}" == "--reseed-env" ]]; then
+      reseed_env=1
+      shift
+    fi
+    bash "$ROOT/scripts/sync_to_remote.sh"
+    push_download_env
+    if [[ "$reseed_env" == "1" ]]; then
+      ssh_gpu "RESEED_LLAMA_ENV=1 bash ${REMOTE_CONTROL}/scripts/remote/bootstrap.sh"
+    else
+      ssh_gpu "bash ${REMOTE_CONTROL}/scripts/remote/bootstrap.sh"
+    fi
+    bash "$ROOT/scripts/install_mac_control.sh"
+    echo
+    echo "Control UI: http://127.0.0.1:8090/"
+    echo "API docs:   http://127.0.0.1:8090/docs"
+    ;;
+  models-local)
+    export COMFYUI_ROOT="${COMFYUI_ROOT:-/tmp/ai-comfy-models}"
+    export LLAMACPP_MODELS="${LLAMACPP_MODELS:-/tmp/ai-llama-models}"
+    python3 "$ROOT/scripts/model_status.py" "$@"
+    ;;
+  pubkey)
+    bash "$ROOT/scripts/show_pubkey.sh"
+    ;;
+  ""|help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage
+    exit 1
+    ;;
+esac

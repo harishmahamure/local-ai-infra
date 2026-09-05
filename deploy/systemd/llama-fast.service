@@ -1,0 +1,22 @@
+[Unit]
+Description=llama-server Qwen3.6-35B-A3B RotorQuant (Q4 + vision)
+After=network-online.target
+Wants=network-online.target
+Conflicts=comfyui.service comfyui-ltx.service gemma.service
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStartPre=@HOME@/ai-inference/control/scripts/remote/ensure-exclusive.sh llama-fast.service
+ExecStart=@HOME@/ai-inference/control/scripts/remote/llama-server.sh llama-fast
+KillMode=mixed
+TimeoutStopSec=45
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:@HOME@/ai-inference/logs/llama-fast.log
+StandardError=append:@HOME@/ai-inference/logs/llama-fast.log
+
+[Install]
+# Do not enable — start only via `ai start llama-fast` so one model occupies the GPU.
+WantedBy=default.target

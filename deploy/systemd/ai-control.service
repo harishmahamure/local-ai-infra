@@ -1,0 +1,19 @@
+[Unit]
+Description=AI inference control API (status, downloads, profile switch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=AI_CONTROL=@HOME@/ai-inference/control
+Environment=AI_VENV=@VENV@
+Environment=PYTHONPATH=@HOME@/ai-inference/control
+WorkingDirectory=@HOME@/ai-inference/control
+ExecStart=@VENV@/bin/uvicorn control-api.app.main:app --host @LAN_IP@ --port 8090
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:@HOME@/ai-inference/logs/ai-control.log
+StandardError=append:@HOME@/ai-inference/logs/ai-control.log
+
+[Install]
+WantedBy=default.target

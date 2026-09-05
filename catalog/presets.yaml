@@ -1,0 +1,79 @@
+# Parameter policies. Presets are not workflows.
+# External callers normally send preset=master; the engine chooses steps/CFG/models.
+
+presets:
+  - id: draft
+    label: Draft
+    description: Fast experiments. Lightning/Turbo and LTX distilled are allowed.
+    operations: [image.generate, image.upscale, video.generate, video.image_to_video, video.audio_to_video, video.first_last_frames, video.lipsync, video.motion_transfer]
+    parameters:
+      steps: 4
+      cfg: 1.0
+      candidate_count: 1
+      refine: false
+      prompt_enhance: false
+      scale: 2
+    forbidden_loras: []
+    required_models: []
+
+  - id: balanced
+    label: Balanced
+    description: Production quality without every expensive stage.
+    operations: [image.generate, image.upscale, video.generate, video.image_to_video, video.audio_to_video, video.first_last_frames, video.lipsync, video.motion_transfer]
+    parameters:
+      steps: 20
+      cfg: 4.0
+      candidate_count: 1
+      refine: false
+      prompt_enhance: false
+      scale: 4
+    forbidden_loras: [qwen-turbo]
+    required_models: []
+
+  - id: master
+    label: Master
+    description: Full-quality path. No rushing. No Lightning/Turbo on image.
+    operations: [image.generate, image.upscale, video.generate, video.image_to_video, video.audio_to_video, video.first_last_frames, video.lipsync, video.motion_transfer]
+    parameters:
+      steps: 30
+      cfg: 4.0
+      candidate_count: 1
+      refine: true
+      prompt_enhance: false
+      scale: 4
+    forbidden_loras: [qwen-lightning, qwen-turbo]
+    required_models: []
+
+  - id: character_master
+    label: Character master
+    description: Full-quality Qwen identity sheet. No Lightning or Turbo.
+    operations: [image.generate]
+    workflow_id: qwen-txt2img
+    parameters:
+      steps: 30
+      cfg: 4.0
+      candidate_count: 4
+      aspect_ratio: "2:3"
+      width: 1080
+      height: 1620
+    forbidden_loras: [qwen-lightning, qwen-turbo]
+    required_models: [qwen-image-2512-fp8]
+
+  - id: identity_strict
+    label: Identity strict
+    description: Maximize face/age/hair/attire preservation on edit (Phase 2).
+    operations: [image.edit]
+    parameters:
+      steps: 30
+      cfg: 4.0
+    forbidden_loras: [qwen-lightning, qwen-turbo]
+    required_models: [qwen-image-edit-2511-fp8]
+
+  - id: conservative_upscale
+    label: Conservative upscale
+    description: RealESRGAN only. No generative changes.
+    operations: [image.upscale]
+    parameters:
+      scale: 2
+    forbidden_loras: []
+    required_models: [upscalers-esrgan]

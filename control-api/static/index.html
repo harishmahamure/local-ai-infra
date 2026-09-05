@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Inference Control</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>AI Inference Control</h1>
+      <div class="meta">One GPU profile at a time</div>
+    </div>
+    <nav>
+      <a href="#/" data-route="/">Dashboard</a>
+      <a href="#/generate" data-route="/generate">Generate</a>
+      <a href="#/upscale" data-route="/upscale">Upscale</a>
+      <a href="#/ltx-video" data-route="/ltx-video">LTX video</a>
+      <a href="#/downloads" data-route="/downloads">Downloads</a>
+      <a href="#/runtime" data-route="/runtime">Runtime</a>
+      <a href="#/models" data-route="/models">Models</a>
+      <a href="/docs" target="_blank" rel="noopener">API</a>
+    </nav>
+    <div class="meta" id="lastRefresh">—</div>
+  </header>
+
+  <main>
+    <!-- Dashboard -->
+    <section class="page active" data-page="dashboard">
+      <div class="grid">
+        <div class="card">
+          <h2>GPU runtime</h2>
+          <div id="dashLoad" class="badge idle">—</div>
+          <p class="meta">Profile: <strong id="dashProfile">—</strong></p>
+        </div>
+        <div class="card">
+          <h2>Download job</h2>
+          <div id="dashDl" class="badge idle">—</div>
+          <p class="meta" id="dashCurrent">—</p>
+        </div>
+        <div class="card">
+          <h2>On disk</h2>
+          <div class="stat" id="dashBytes">—</div>
+          <p class="meta"><span id="dashFiles">—</span> · <span id="dashBundles">—</span></p>
+        </div>
+      </div>
+      <section class="card" style="margin-top:1rem">
+        <h2>Catalog progress</h2>
+        <div class="progress"><span id="dashProgressBar" style="width:0%"></span></div>
+        <p class="meta" id="dashProgressLabel">0% required files on disk</p>
+        <div class="row">
+          <a href="#/generate"><button class="secondary">Generate images →</button></a>
+          <a href="#/ltx-video"><button class="secondary">LTX video →</button></a>
+          <a href="#/downloads"><button class="secondary">View all files →</button></a>
+        </div>
+      </section>
+    </section>
+
+    <!-- Generate -->
+    <section class="page" data-page="generate">
+      <div class="grid">
+        <section class="card">
+          <h2>Generate image</h2>
+          <p class="meta">Text prompts use Gemma; reference images use Qwen vision (llama-fast) → Qwen-Image executes. Default output: 1920×1080 unless the planner picks a preset with other dimensions.</p>
+          <label class="field">
+            <span>Prompt</span>
+            <textarea id="genPrompt" rows="5" placeholder="Describe the image you want…"></textarea>
+          </label>
+          <label class="field">
+            <span>Reference image (optional)</span>
+            <input type="file" id="genImage" accept="image/*" />
+          </label>
+          <label class="field">
+            <span>Batch count (1–10)</span>
+            <input type="number" id="genCount" min="1" max="10" value="1" />
+          </label>
+          <label class="field">
+            <span>Fast generation</span>
+            <select id="genFastMode">
+              <option value="">Auto (planner decides)</option>
+              <option value="true" selected>On (Lightning, 4 steps)</option>
+              <option value="false">Off (quality)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Steps</span>
+            <select id="genSteps">
+              <option value="">Auto</option>
+              <option value="2">2 (Turbo)</option>
+              <option value="4">4 (Lightning)</option>
+              <option value="8">8</option>
+              <option value="20">20</option>
+              <option value="30">30 (Quality)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Upscale output</span>
+            <select id="genUpscale">
+              <option value="">Auto</option>
+              <option value="true">Yes (4× RealESRGAN)</option>
+              <option value="false">No</option>
+            </select>
+          </label>
+          <p class="meta">Each image is saved under <code>jobs/&lt;jobId&gt;/images/</code> on the GPU as it completes — recoverable if Wi‑Fi drops.</p>
+          <div class="row">
+            <button id="genSubmit">Generate</button>
+            <button class="secondary" id="genClear">Clear</button>
+          </div>
+          <p class="meta" id="genStatus">—</p>
+          <div id="genProgress" class="job-progress" hidden></div>
+        </section>
+        <section class="card">
+          <h2>Output</h2>
+          <div id="genOutput" class="gen-output meta">Submit a prompt to start.</div>
+          <pre id="genPlan" class="gen-plan"></pre>
+        </section>
+      </div>
+      <section class="card" style="margin-top:1rem">
+        <h2>Capabilities</h2>
+        <p class="meta" id="capSummary">—</p>
+        <div id="capPresets"></div>
+      </section>
+    </section>
+
+    <!-- Upscale -->
+    <section class="page" data-page="upscale">
+      <div class="grid">
+        <section class="card">
+          <h2>Upscale image</h2>
+          <p class="meta">RealESRGAN via ComfyUI — upload a still or reference a prior generate job output.</p>
+          <label class="field">
+            <span>Image (required unless using source job)</span>
+            <input type="file" id="upImage" accept="image/*" />
+          </label>
+          <label class="field">
+            <span>Source job ID (optional)</span>
+            <input type="text" id="upSourceJobId" placeholder="UUID from a generate job" />
+          </label>
+          <label class="field">
+            <span>Source filename (optional)</span>
+            <input type="text" id="upSourceFilename" placeholder="e.g. 0000_00_ComfyUI_00001_.png" />
+          </label>
+          <label class="field">
+            <span>Scale</span>
+            <select id="upScale">
+              <option value="4" selected>4× (RealESRGAN x4plus)</option>
+              <option value="2">2× (RealESRGAN x2plus)</option>
+            </select>
+          </label>
+          <p class="meta">Output saved under <code>jobs/&lt;jobId&gt;/images/</code> on the GPU.</p>
+          <div class="row">
+            <button id="upSubmit">Upscale</button>
+            <button class="secondary" id="upClear">Clear</button>
+          </div>
+          <p class="meta" id="upStatus">—</p>
+          <div id="upProgress" class="job-progress" hidden></div>
+        </section>
+        <section class="card">
+          <h2>Output</h2>
+          <div id="upOutput" class="gen-output meta">Upload an image or set source job fields.</div>
+          <pre id="upPlan" class="gen-plan"></pre>
+        </section>
+      </div>
+      <section class="card" style="margin-top:1rem">
+        <h2>Capabilities</h2>
+        <p class="meta" id="upCapSummary">—</p>
+      </section>
+    </section>
+
+    <!-- LTX video -->
+    <section class="page" data-page="ltx-video">
+      <div class="grid">
+        <section class="card">
+          <h2>LTX-2.5 video + audio</h2>
+          <p class="meta">Describe shot type, action, camera, lighting, and audio. Use <strong>Standard</strong> or <strong>Quality</strong> for sharp output (2-stage refine). Fast is preview-only and softer.</p>
+          <label class="field">
+            <span>Orientation</span>
+            <select id="ltxOrientation">
+              <option value="portrait">Portrait (9:16)</option>
+              <option value="landscape">Landscape (16:9)</option>
+              <option value="square">Square (1:1)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Speed</span>
+            <select id="ltxSpeed">
+              <option value="standard">Standard</option>
+              <option value="fast">Fast (preview, softer)</option>
+              <option value="quality">Quality (slower, refine)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Mode</span>
+            <select id="ltxMode">
+              <option value="t2v">Text to video</option>
+              <option value="a2v">Audio to video</option>
+              <option value="i2v">Image to video</option>
+              <option value="flf2v">First and last frames</option>
+              <option value="lipsync">Image + audio lip sync</option>
+              <option value="lipsync_flf">First and last + lip sync</option>
+              <option value="lipsync_fml">First, middle, last + lip sync</option>
+              <option value="motion_transfer">Motion transfer</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Prompt</span>
+            <textarea id="ltxPrompt" rows="4" placeholder="Wide shot of a rainy street at night. Slow dolly forward. Neon reflections on wet pavement…"></textarea>
+          </label>
+          <label class="field">
+            <span>Audio prompt (recommended)</span>
+            <textarea id="ltxAudio" rows="2" placeholder="e.g. gentle rain, distant thunder — or: silent, no sound"></textarea>
+          </label>
+          <label class="field" id="ltxImageField">
+            <span>Start image</span>
+            <input type="file" id="ltxImage" accept="image/*" />
+          </label>
+          <label class="field" id="ltxEndImageField">
+            <span>Last frame</span>
+            <input type="file" id="ltxEndImage" accept="image/*" />
+          </label>
+          <label class="field" id="ltxMiddleImageField">
+            <span>Middle frame (optional lip sync)</span>
+            <input type="file" id="ltxMiddleImage" accept="image/*" />
+          </label>
+          <label class="field" id="ltxAudioField">
+            <span>Audio (uploaded track)</span>
+            <input type="file" id="ltxAudioFile" accept="audio/*" />
+          </label>
+          <label class="field">
+            <span>Camera motion</span>
+            <select id="ltxCameraMotion">
+              <option value="auto">Auto (from prompt)</option>
+              <option value="none">None</option>
+              <option value="dolly_in">Dolly in</option>
+              <option value="dolly_out">Dolly out</option>
+              <option value="dolly_left">Dolly left</option>
+              <option value="dolly_right">Dolly right</option>
+              <option value="jib_up">Jib up</option>
+              <option value="jib_down">Jib down</option>
+              <option value="static">Static</option>
+            </select>
+          </label>
+          <label class="field" id="ltxRefVideoField">
+            <span>Reference video (IC-LoRA / Detailer)</span>
+            <input type="file" id="ltxRefVideo" accept="video/*" />
+          </label>
+          <div id="ltxIcFields" style="display:none">
+            <label class="field">
+              <span>IC-LoRA</span>
+              <select id="ltxIcLora">
+                <option value="auto">Auto</option>
+                <option value="none">None</option>
+                <option value="union">Union Control</option>
+                <option value="detailer">Detailer</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Control type</span>
+              <select id="ltxControlType">
+                <option value="auto">Auto</option>
+                <option value="depth">Depth</option>
+                <option value="canny">Canny</option>
+                <option value="pose">Pose</option>
+              </select>
+            </label>
+            <label class="field"><span><input type="checkbox" id="ltxDetailer" /> Detailer IC-LoRA</span></label>
+          </div>
+          <label class="field">
+            <span>Duration (seconds, 1–10)</span>
+            <input type="number" id="ltxDuration" min="1" max="10" step="0.5" placeholder="4" />
+          </label>
+          <details class="field">
+            <summary>Advanced parameters</summary>
+            <label class="field"><span>Preset</span><select id="ltxPreset"></select></label>
+            <label class="field"><span>Seed</span><input type="number" id="ltxSeed" placeholder="random" /></label>
+            <label class="field"><span>Width</span><input type="number" id="ltxWidth" min="256" max="2048" step="32" /></label>
+            <label class="field"><span>Height</span><input type="number" id="ltxHeight" min="256" max="2048" step="32" /></label>
+            <label class="field"><span>Steps</span><input type="number" id="ltxSteps" min="1" max="60" /></label>
+            <label class="field"><span>Video CFG (1.0 for distilled — higher degrades quality)</span><input type="number" id="ltxVideoCfg" min="1" max="15" step="0.1" placeholder="1" /></label>
+            <label class="field"><span>Audio CFG</span><input type="number" id="ltxAudioCfg" min="1" max="15" step="0.1" /></label>
+            <label class="field"><span>Negative prompt</span><textarea id="ltxNegative" rows="2"></textarea></label>
+            <label class="field"><span>I2V strength</span><input type="number" id="ltxStrength" min="0" max="1" step="0.05" /></label>
+            <label class="field"><span><input type="checkbox" id="ltxRefine" /> Latent upscale refine (2-stage, LTX Studio)</span></label>
+            <label class="field"><span>Refine steps</span><input type="number" id="ltxRefineSteps" min="1" max="40" /></label>
+            <label class="field"><span>Refine denoise</span><input type="number" id="ltxRefineDenoise" min="0.05" max="1" step="0.05" /></label>
+            <label class="field"><span><input type="checkbox" id="ltxTiledDecode" /> Tiled VAE decode</span></label>
+            <label class="field" id="ltxPromptEnhanceField"><span><input type="checkbox" id="ltxPromptEnhance" /> Prompt enhance (LTX Studio LLM)</span></label>
+          </details>
+          <p class="meta">Videos saved under <code>jobs/&lt;jobId&gt;/videos/</code> with audio track.</p>
+          <div class="row">
+            <button id="ltxSubmit">Generate</button>
+            <button class="secondary" id="ltxClear">Clear</button>
+          </div>
+          <p class="meta" id="ltxStatus">—</p>
+          <div id="ltxProgress" class="job-progress" hidden></div>
+        </section>
+        <section class="card">
+          <h2>Output</h2>
+          <div id="ltxOutput" class="gen-output meta">Submit a prompt to start.</div>
+          <pre id="ltxPlan" class="gen-plan"></pre>
+        </section>
+      </div>
+      <section class="card" style="margin-top:1rem">
+        <h2>LTX capabilities</h2>
+        <p class="meta" id="ltxCapSummary">—</p>
+        <p class="meta" id="ltxComfyHint">—</p>
+        <div id="ltxCapPresets"></div>
+      </section>
+    </section>
+
+    <!-- Downloads -->
+    <section class="page" data-page="downloads">
+      <div class="grid">
+        <div class="card">
+          <h2>Job status</h2>
+          <div id="dlBadge" class="badge idle">—</div>
+          <p class="meta" id="dlSummary">—</p>
+          <p class="meta" id="dlCurrent">—</p>
+          <div class="progress"><span id="dlProgressBar" style="width:0%"></span></div>
+          <p class="meta" id="dlProgressLabel">0% complete</p>
+          <div class="row">
+            <button id="startDownload">Start download (all)</button>
+            <button class="secondary" id="refreshBtn">Refresh</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Log</h2>
+          <pre id="dlLog"></pre>
+        </div>
+      </div>
+      <section class="card" style="margin-top:1rem">
+        <h2>All catalog files</h2>
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Bundle</th><th>File</th><th>Size</th><th>Opt</th></tr>
+          </thead>
+          <tbody id="filesBody"></tbody>
+        </table>
+      </section>
+    </section>
+
+    <!-- Runtime -->
+    <section class="page" data-page="runtime">
+      <div class="grid">
+        <section class="card">
+          <h2>Runtime</h2>
+          <div id="loadBadge" class="badge idle">—</div>
+          <p><strong>Profile:</strong> <span id="profile">—</span></p>
+          <p><strong>Model:</strong> <span id="model">—</span></p>
+          <p><strong>API:</strong> <span id="apiState">—</span></p>
+          <p class="meta" id="activeUrl">—</p>
+          <div id="endpointLinks" class="endpoint-links"></div>
+          <div class="row">
+            <button data-profile="llama-fast">Start llama-fast</button>
+            <button data-profile="gemma">Start gemma</button>
+            <button data-profile="comfy">Start comfy</button>
+            <button data-profile="comfy-ltx">Start comfy-ltx</button>
+            <button class="danger" id="stopBtn">Stop all</button>
+          </div>
+        </section>
+        <section class="card">
+          <h2>GPU</h2>
+          <p id="gpuName">—</p>
+          <p id="gpuMem">—</p>
+          <p id="gpuUtil">—</p>
+          <pre id="gpuProcs">—</pre>
+        </section>
+      </div>
+
+      <div class="grid profile-grid" style="margin-top:1rem">
+        <section class="card profile-card" data-profile-card="llama-fast">
+          <h2>llama-fast</h2>
+          <p class="profile-title">LLM + vision (fast)</p>
+          <p class="meta">Qwen3.6-35B-A3B RotorQuant Q4 + mmproj · 262K ctx · text + vision chat</p>
+          <p class="meta" id="llamaFastReady">—</p>
+        </section>
+        <section class="card profile-card" data-profile-card="gemma">
+          <h2>gemma</h2>
+          <p class="profile-title">Text + vision planner</p>
+          <p class="meta">Gemma 4 E4B Q4 + mmproj · 128K ctx · classify, prompt enhance, and vision</p>
+          <p class="meta" id="gemmaReady">—</p>
+        </section>
+        <section class="card profile-card" data-profile-card="comfy">
+          <h2>comfy</h2>
+          <p class="profile-title">Image generation</p>
+          <p class="meta">ComfyUI · Qwen-Image dynamic graphs</p>
+          <p class="meta" id="comfyReady">—</p>
+        </section>
+        <section class="card profile-card" data-profile-card="comfy-ltx">
+          <h2>comfy-ltx</h2>
+          <p class="profile-title">LTX-2.5 video + audio</p>
+          <p class="meta">ComfyUI LTX · T2V / I2V with synchronized audio (:8189)</p>
+          <p class="meta" id="comfyLtxReady">—</p>
+        </section>
+      </div>
+
+      <section class="card" id="llamaPanel" style="margin-top:1rem;display:none">
+        <h2>LLM + vision API</h2>
+        <p class="meta">OpenAI-compatible chat at <code>/v1/chat/completions</code>.</p>
+        <div class="row" id="llamaActions"></div>
+      </section>
+    </section>
+
+    <!-- Models -->
+    <section class="page" data-page="models">
+      <p class="meta" id="catalogSummary">—</p>
+      <div id="catalogRoot"></div>
+    </section>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

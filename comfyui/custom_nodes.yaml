@@ -1,0 +1,85 @@
+# Pinned ComfyUI custom node packs. Installed by scripts/remote/install_custom_nodes.sh
+# on the GPU box into $COMFYUI_ROOT/custom_nodes/
+
+nodes:
+  - id: comfyui-manager
+    repo: https://github.com/ltdrdata/ComfyUI-Manager
+    dir: ComfyUI-Manager
+    pin: null  # track main; manager self-updates
+
+  - id: comfyui_controlnet_aux
+    repo: https://github.com/Fannovel16/comfyui_controlnet_aux
+    dir: comfyui_controlnet_aux
+    pin: 59b1fc411ede
+    pip: requirements.txt
+    note: DWPose, DepthAnythingV2, and other ControlNet preprocessors
+
+  # Existing packs on GPU box (recorded for reproducibility; no pin unless known)
+  - id: comfyroll
+    repo: https://github.com/Suzie1/ComfyUI_Comfyroll_CustomNodes
+    dir: ComfyUI_Comfyroll_CustomNodes
+    pin: null
+
+  - id: comfyui-essentials
+    repo: https://github.com/cubiq/ComfyUI_essentials
+    dir: ComfyUI_essentials
+    pin: null
+
+  - id: flux2klein-enhancer
+    repo: https://github.com/capitan01R/ComfyUI-Flux2Klein-Enhancer
+    dir: ComfyUI-Flux2Klein-Enhancer
+    pin: null
+
+  - id: comfyui-gguf
+    repo: https://github.com/city96/ComfyUI-GGUF
+    dir: ComfyUI-GGUF
+    pin: null
+
+  - id: gps-supplements
+    repo: https://github.com/gps794/comfyui-gps-supplements
+    dir: comfyui-gps-supplements
+    pin: null
+
+  - id: impact-pack
+    repo: https://github.com/ltdrdata/ComfyUI-Impact-Pack
+    dir: comfyui-impact-pack
+    pin: null
+
+  - id: inspire-pack
+    repo: https://github.com/ltdrdata/ComfyUI-Inspire-Pack
+    dir: ComfyUI-Inspire-Pack
+    pin: null
+
+  - id: kjnodes
+    repo: https://github.com/kijai/ComfyUI-KJNodes
+    dir: ComfyUI-KJNodes
+    pin: null
+
+  - id: ultimatesdupscale
+    repo: https://github.com/ssitu/ComfyUI_UltimateSDUpscale
+    dir: comfyui_ultimatesdupscale
+    pin: null
+
+  - id: rgthree-comfy
+    repo: https://github.com/rgthree/rgthree-comfy
+    dir: rgthree-comfy
+    pin: null
+
+  - id: was-node-suite
+    repo: https://github.com/WASasquatch/was-node-suite-comfyui
+    dir: was-node-suite-comfyui
+    pin: null
+
+  - id: comfyui-ltxvideo
+    repo: https://github.com/Lightricks/ComfyUI-LTXVideo
+    dir: ComfyUI-LTXVideo
+    pin: null
+    pip: requirements.txt
+    note: LTXICLoRALoaderModelOnly, LTXAddVideoICLoRAGuide
+
+  - id: comfyui-video-depth-anything
+    repo: https://github.com/yuvraj108c/ComfyUI-Video-Depth-Anything
+    dir: ComfyUI-Video-Depth-Anything
+    pin: null
+    pip: requirements.txt
+    note: VideoDepthAnythingProcess for Union Control depth annotation

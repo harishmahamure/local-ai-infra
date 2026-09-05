@@ -1,0 +1,17 @@
+comfyui:
+  base_path: /home/harishmahamure/ComfyUI/models/
+  diffusion_models: diffusion_models/
+  text_encoders: text_encoders/
+  vae: vae/
+  loras: loras/
+  checkpoints: checkpoints/
+  controlnet: controlnet/
+  model_patches: model_patches/
+  latent_upscale_models: latent_upscale_models/
+  upscale_models: upscale_models/
+
+# Optional archive disk — uncomment and set after inventory confirms mount:
+# archive:
+#   base_path: /mnt/archive/models/
+#   diffusion_models: diffusion_models/
+#   loras: loras/

@@ -1,0 +1,21 @@
+[Unit]
+Description=llama-server Gemma 4 E4B planner (Q4 + vision)
+After=network-online.target
+Wants=network-online.target
+Conflicts=llama-fast.service comfyui.service comfyui-ltx.service
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStartPre=@HOME@/ai-inference/control/scripts/remote/ensure-exclusive.sh gemma.service
+ExecStart=@HOME@/ai-inference/control/scripts/remote/llama-server.sh gemma
+KillMode=mixed
+TimeoutStopSec=45
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:@HOME@/ai-inference/logs/gemma.log
+StandardError=append:@HOME@/ai-inference/logs/gemma.log
+
+[Install]
+WantedBy=default.target

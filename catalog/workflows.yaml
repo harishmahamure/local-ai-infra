@@ -1,0 +1,170 @@
+# Internal workflow registry. External clients call operations, not these IDs.
+# Phase 1 builders wrap existing Python graph modules.
+
+workflows:
+  - id: qwen-txt2img
+    version: v1
+    operation: image.generate
+    description: Qwen Image 2512 text-to-image
+    executor: comfyui
+    builder: qwen_txt2img
+    required_models: [qwen-image-2512-fp8]
+    optional_models: [qwen-image-2512-lightning-lora]
+    required_nodes: [UNETLoader, CLIPLoader, VAELoader, KSampler, SaveImage]
+    supported_presets: [draft, balanced, master, character_master]
+    supports_seed: true
+    supports_cancel: true
+    supports_batch: true
+    resource:
+      estimated_vram_gb: 20
+      profile: comfy
+      timeout_class: image
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+      image: {key: image_name}
+
+  - id: realesrgan-upscale
+    version: v1
+    operation: image.upscale
+    description: RealESRGAN conservative upscale
+    executor: comfyui
+    builder: qwen_upscale
+    required_models: [upscalers-esrgan]
+    required_nodes: [LoadImage, SaveImage]
+    supported_presets: [draft, balanced, master, conservative_upscale]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 2
+      profile: comfy
+      timeout_class: image
+    bindings:
+      image: {key: image_name}
+
+  - id: ltx25-t2v
+    version: v1
+    operation: video.generate
+    description: LTX 2.5 text-to-video
+    executor: comfyui
+    builder: ltx_t2v
+    required_models: [ltx-2.5-distilled]
+    optional_models: [ltx-2.5-studio]
+    required_nodes: [LTXVScheduler]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 28
+      profile: comfy-ltx
+      timeout_class: video
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+
+  - id: ltx25-i2v
+    version: v1
+    operation: video.image_to_video
+    description: LTX 2.5 image-to-video
+    executor: comfyui
+    builder: ltx_i2v
+    required_models: [ltx-2.5-distilled]
+    optional_models: [ltx-2.5-studio]
+    required_nodes: [LTXVScheduler]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 28
+      profile: comfy-ltx
+      timeout_class: video
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+      image: {key: image_name}
+
+  - id: ltx25-a2v
+    version: v1
+    operation: video.audio_to_video
+    description: LTX 2.5 audio-to-video
+    executor: comfyui
+    builder: ltx_a2v
+    required_models: [ltx-2.5-distilled]
+    optional_models: [ltx-2.5-studio]
+    required_nodes: [LTXVAudioVAEEncode]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 28
+      profile: comfy-ltx
+      timeout_class: video
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+      audio: {key: audio_name}
+
+  - id: ltx25-flf2v
+    version: v1
+    operation: video.first_last_frames
+    description: LTX 2.5 first and last frames to video
+    executor: comfyui
+    builder: ltx_flf2v
+    required_models: [ltx-2.5-distilled]
+    optional_models: [ltx-2.5-studio]
+    required_nodes: [LTXVAddGuide]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 28
+      profile: comfy-ltx
+      timeout_class: video
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+      start_image: {key: image_name}
+      end_image: {key: end_image_name}
+
+  - id: ltx25-lipsync
+    version: v1
+    operation: video.lipsync
+    description: LTX 2.5 image/keyframes + audio lip sync
+    executor: comfyui
+    builder: ltx_lipsync
+    required_models: [ltx-2.5-distilled, ltx-iclora-lipdub]
+    optional_models: [ltx-2.5-studio]
+    required_nodes: [LTXVAudioVAEEncode, LTXICLoRALoaderModelOnly]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 28
+      profile: comfy-ltx
+      timeout_class: video
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+      start_image: {key: image_name}
+      audio: {key: audio_name}
+
+  - id: ltx25-motion-transfer
+    version: v1
+    operation: video.motion_transfer
+    description: LTX 2.5 motion transfer from a reference video
+    executor: comfyui
+    builder: ltx_motion_transfer
+    required_models: [ltx-2.5-distilled, ltx-iclora-motion-track]
+    optional_models: [ltx-2.5-studio]
+    required_nodes: [LTXAddVideoICLoRAGuide]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 28
+      profile: comfy-ltx
+      timeout_class: video
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+      reference_video: {key: video_name}

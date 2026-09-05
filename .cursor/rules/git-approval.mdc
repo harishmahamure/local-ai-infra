@@ -1,0 +1,11 @@
+---
+description: Never commit or push without explicit user approval
+alwaysApply: true
+---
+
+# Git approval (hard)
+
+- Do NOT run `git commit`, `git amend`, or `git push` unless the user explicitly asks in the current message.
+- Do NOT commit on the remote GPU box. Source of truth is this Mac repo; remote receives approved sync only.
+- Never commit: `.env`, `HF_TOKEN`, model weights, `catalog/installed.json`, secrets.
+- Remote changes via `ai sync` / rsync only after local commits the user approved.

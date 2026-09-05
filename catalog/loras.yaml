@@ -1,0 +1,247 @@
+# LoRA registry. Exclusive groups prevent incompatible simultaneous adapters.
+# LTX-2 / LTX-2.3 weights require a compatibility test before /v1 auto-use.
+
+groups:
+  camera_control:
+    max_active: 1
+  qwen_speed:
+    max_active: 1
+
+loras:
+  - id: qwen-lightning
+    family: qwen-image-2512
+    role: speed
+    file: Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors
+    bundle: qwen-image-2512-lightning-lora
+    compatible_models: [qwen-image-2512-fp8]
+    recommended_strength: 1.0
+    allowed_strength_range: [0.0, 1.0]
+    exclusive_group: qwen_speed
+    license: Apache-2.0
+    commercial_use: true
+    compatibility_status: validated
+    compatibility_test_required: false
+
+  - id: qwen-turbo
+    family: qwen-image-2512
+    role: speed
+    file: Wuli-Qwen-Image-2512-Turbo-LoRA-2steps-V1.0-bf16.safetensors
+    bundle: qwen-image-2512-turbo-lora
+    compatible_models: [qwen-image-2512-fp8]
+    recommended_strength: 1.0
+    allowed_strength_range: [0.0, 1.0]
+    exclusive_group: qwen_speed
+    license: Apache-2.0
+    commercial_use: true
+    compatibility_status: validated
+    compatibility_test_required: false
+
+  - id: qwen-advertisement
+    family: qwen-image-2512
+    role: style
+    file: qwen-advertisement-lora.safetensors
+    bundle: qwen-lora-advertisement
+    compatible_models: [qwen-image-2512-fp8]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    license: Apache-2.0
+    commercial_use: true
+    compatibility_status: validated
+
+  - id: qwen-poster
+    family: qwen-image-2512
+    role: style
+    file: qwen-poster-lora.safetensors
+    bundle: qwen-lora-poster
+    compatible_models: [qwen-image-2512-fp8]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    license: MIT
+    commercial_use: true
+    compatibility_status: validated
+
+  - id: qwen-flat-cartoon
+    family: qwen-image-2512
+    role: style
+    file: qwen-flat-cartoon-lora.safetensors
+    bundle: qwen-lora-flat-cartoon
+    compatible_models: [qwen-image-2512-fp8]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    license: Apache-2.0
+    commercial_use: true
+    compatibility_status: validated
+
+  - id: qwen-eligen-poster
+    family: qwen-image-2512
+    role: style
+    file: qwen-eligen-poster-lora.safetensors
+    bundle: qwen-lora-eligen-poster
+    compatible_models: [qwen-image-2512-fp8]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    license: Apache-2.0
+    commercial_use: true
+    compatibility_status: validated
+
+  - id: qwen-realism
+    family: qwen-image-2512
+    role: style
+    file: qwen-realism-lora.safetensors
+    bundle: qwen-lora-realism
+    compatible_models: [qwen-image-2512-fp8]
+    recommended_strength: 0.6
+    allowed_strength_range: [0.0, 1.0]
+    license: Apache-2.0
+    commercial_use: true
+    compatibility_status: validated
+
+  - id: ltx-camera-dolly-in
+    family: ltx-2
+    role: camera_control
+    file: ltx-2-19b-lora-camera-control-dolly-in.safetensors
+    bundle: ltx-camera-loras
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    exclusive_group: camera_control
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-camera-dolly-out
+    family: ltx-2
+    role: camera_control
+    file: ltx-2-19b-lora-camera-control-dolly-out.safetensors
+    bundle: ltx-camera-loras
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    exclusive_group: camera_control
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-camera-dolly-left
+    family: ltx-2
+    role: camera_control
+    file: ltx-2-19b-lora-camera-control-dolly-left.safetensors
+    bundle: ltx-camera-loras
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    exclusive_group: camera_control
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-camera-dolly-right
+    family: ltx-2
+    role: camera_control
+    file: ltx-2-19b-lora-camera-control-dolly-right.safetensors
+    bundle: ltx-camera-loras
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    exclusive_group: camera_control
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-camera-jib-up
+    family: ltx-2
+    role: camera_control
+    file: ltx-2-19b-lora-camera-control-jib-up.safetensors
+    bundle: ltx-camera-loras
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    exclusive_group: camera_control
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-camera-jib-down
+    family: ltx-2
+    role: camera_control
+    file: ltx-2-19b-lora-camera-control-jib-down.safetensors
+    bundle: ltx-camera-loras
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    exclusive_group: camera_control
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-camera-static
+    family: ltx-2
+    role: camera_control
+    file: ltx-2-19b-lora-camera-control-static.safetensors
+    bundle: ltx-camera-loras
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 0.8
+    allowed_strength_range: [0.0, 1.2]
+    exclusive_group: camera_control
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-iclora-union
+    family: ltx-2.3
+    role: control
+    file: ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors
+    bundle: ltx-iclora-union
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 0.5
+    allowed_strength_range: [0.0, 1.0]
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-iclora-detailer
+    family: ltx-2
+    role: detailer
+    file: ltx-2-19b-ic-lora-detailer.safetensors
+    bundle: ltx-iclora-detailer
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 0.6
+    allowed_strength_range: [0.0, 1.0]
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-iclora-lipdub
+    family: ltx-2.3
+    role: lipsync
+    file: ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors
+    bundle: ltx-iclora-lipdub
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 1.0
+    allowed_strength_range: [0.0, 1.0]
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
+
+  - id: ltx-iclora-motion-track
+    family: ltx-2.3
+    role: motion_transfer
+    file: ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors
+    bundle: ltx-iclora-motion-track
+    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
+    recommended_strength: 1.0
+    allowed_strength_range: [0.0, 1.0]
+    license: LTX-2-Community
+    commercial_use: true
+    compatibility_status: untested
+    compatibility_test_required: true
