@@ -70,6 +70,8 @@ class ComfyUIExecutor:
                 raise DomainError(ErrorCode.INVALID_REQUEST, "An input image asset is required")
             uploaded = client.upload_image(image_bytes, f"{job.job_id}.png")
             plan["image_name"] = uploaded.get("name") or uploaded.get("filename") or f"{job.job_id}.png"
+        if workflow.builder in {"qwen_edit", "qwen_control", "qwen_layered"}:
+            self._upload_qwen_assets(client, job.job_id, request.input_files, plan, workflow.builder)
         if workflow.builder.startswith("ltx_"):
             self._upload_ltx_assets(client, job.job_id, request.input_files, plan)
 
@@ -99,6 +101,19 @@ class ComfyUIExecutor:
     def _build_graph(self, builder: str, plan: dict[str, Any]) -> dict[str, Any]:
         if builder == "qwen_txt2img":
             return qwen_graph.build_txt2img(plan)
+        if builder == "qwen_edit":
+            return qwen_graph.build_edit(plan)
+        if builder == "qwen_control":
+            return qwen_graph.build_control(plan)
+        if builder == "qwen_layered":
+            missing = [name for name in qwen_graph.LAYERED_REQUIRED_NODES if not comfy_client.has_node(name)]
+            if missing:
+                raise DomainError(
+                    ErrorCode.WORKFLOW_INVALID,
+                    "Qwen-Image-Layered nodes are missing on ComfyUI "
+                    f"({', '.join(missing)}). Update primary ComfyUI to a release that includes layered nodes.",
+                )
+            return qwen_graph.build_layered(plan)
         if builder == "qwen_upscale":
             return qwen_graph.build_upscale(plan)
         if builder.startswith("ltx_"):
@@ -114,6 +129,36 @@ class ComfyUIExecutor:
                 raise DomainError(ErrorCode.WORKFLOW_INVALID, f"Unknown builder {builder}")
             return ltx_graph.build({**plan, "mode": mode})
         raise DomainError(ErrorCode.WORKFLOW_INVALID, f"Unknown builder {builder}")
+
+    def _upload_qwen_assets(
+        self,
+        client: Any,
+        job_id: str,
+        files: dict[str, bytes],
+        plan: dict[str, Any],
+        builder: str,
+    ) -> None:
+        names: list[str] = []
+        for index in range(3):
+            raw = files.get(f"reference_images_{index}")
+            if not raw:
+                continue
+            uploaded = client.upload_image(raw, f"{job_id}_ref{index}.png")
+            names.append(str(uploaded.get("name") or uploaded.get("filename") or f"{job_id}_ref{index}.png"))
+        primary = files.get("image") or files.get("control_image")
+        if primary:
+            uploaded = client.upload_image(primary, f"{job_id}.png")
+            name = str(uploaded.get("name") or uploaded.get("filename") or f"{job_id}.png")
+            if name not in names:
+                names.insert(0, name)
+        if not names:
+            raise DomainError(ErrorCode.INVALID_REQUEST, "An input image asset is required")
+        plan["image_name"] = names[0]
+        plan["image_names"] = names
+        if builder == "qwen_edit" and len(names) < 1:
+            raise DomainError(ErrorCode.INVALID_REQUEST, "image.edit requires at least one reference image")
+        if builder == "qwen_control" and not (files.get("control_image") or files.get("image")):
+            raise DomainError(ErrorCode.INVALID_REQUEST, "image.controlled requires control_image")
 
     def _upload_ltx_assets(self, client: Any, job_id: str, files: dict[str, bytes], plan: dict[str, Any]) -> None:
         mapping = {

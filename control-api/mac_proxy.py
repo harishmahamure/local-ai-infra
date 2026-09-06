@@ -10,7 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 GPU_CONTROL_URL = os.environ.get("GPU_CONTROL_URL", "http://192.168.50.100:8090").rstrip("/")
 
-app = FastAPI(title="AI Control Proxy", version="1.0.0")
+# Docs live on the GPU control API. Disable them here so /docs, /redoc,
+# and /openapi.json are forwarded instead of the proxy's two-route stub.
+app = FastAPI(
+    title="AI Control Proxy",
+    version="1.0.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

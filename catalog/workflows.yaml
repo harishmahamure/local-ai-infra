@@ -24,6 +24,70 @@ workflows:
       seed: {key: seed}
       image: {key: image_name}
 
+  - id: qwen-edit
+    version: v1
+    operation: image.edit
+    description: Qwen Image Edit 2511 (1–3 reference images)
+    executor: comfyui
+    builder: qwen_edit
+    required_models: [qwen-image-edit-2511-fp8]
+    required_nodes: [UNETLoader, CLIPLoader, VAELoader, TextEncodeQwenImageEdit, KSampler, SaveImage]
+    supported_presets: [draft, balanced, master, identity_strict]
+    supports_seed: true
+    supports_cancel: true
+    supports_batch: true
+    resource:
+      estimated_vram_gb: 21
+      profile: comfy
+      timeout_class: image
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+      image: {key: image_name}
+
+  - id: qwen-control
+    version: v1
+    operation: image.controlled
+    description: Qwen Fun-Union ControlNet (depth / canny / pose)
+    executor: comfyui
+    builder: qwen_control
+    required_models: [qwen-image-2512-fp8, qwen-controlnet-2512-fun-union]
+    required_nodes: [ControlNetLoader, ControlNetApplyAdvanced, KSampler]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    supports_batch: true
+    resource:
+      estimated_vram_gb: 22
+      profile: comfy
+      timeout_class: image
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+      image: {key: image_name}
+
+  - id: qwen-layered
+    version: v1
+    operation: image.layered
+    description: Qwen-Image-Layered RGBA decomposition
+    executor: comfyui
+    builder: qwen_layered
+    required_models: [qwen-image-layered]
+    optional_models: [qwen-image-2512-fp8]
+    required_nodes: [EmptyQwenImageLayeredLatentImage, LatentCut, LatentCutToBatch]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    supports_batch: false
+    resource:
+      estimated_vram_gb: 22
+      profile: comfy
+      timeout_class: image
+    bindings:
+      prompt: {key: prompt}
+      seed: {key: seed}
+      image: {key: image_name}
+
   - id: realesrgan-upscale
     version: v1
     operation: image.upscale

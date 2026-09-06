@@ -38,7 +38,14 @@ From the UI you can:
 - **Runtime** — start/stop GPU profiles (llama-fast, gemma, comfy)
 - **Models** — bundles with per-file sizes and status
 
-API docs (same host): http://127.0.0.1:8090/docs
+API docs (same host):
+
+| Format | URL |
+| ------ | --- |
+| Swagger UI | http://127.0.0.1:8090/docs |
+| ReDoc | http://127.0.0.1:8090/redoc |
+| OpenAPI JSON | http://127.0.0.1:8090/openapi.json |
+| Spec in repo | `control-api/openapi.yaml` |
 
 ## Endpoints after a profile is loaded
 

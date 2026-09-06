@@ -1,12 +1,14 @@
-"""Official LTX camera / IC-LoRA catalog and prompt-based selection."""
+"""LTX-2.5 camera prompt hints and official 2.3 IC-LoRA selection.
+
+Lightricks documents that most LoRAs trained on LTX-2.3 run on LTX-2.5.
+LTX-2 19B camera / Detailer adapters do not — camera is prompt-only here.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
-CAMERA_BUNDLE = "ltx-camera-loras"
 IC_UNION_BUNDLE = "ltx-iclora-union"
-IC_DETAILER_BUNDLE = "ltx-iclora-detailer"
 IC_LIPDUB_BUNDLE = "ltx-iclora-lipdub"
 IC_MOTION_BUNDLE = "ltx-iclora-motion-track"
 
@@ -14,8 +16,7 @@ CAMERA_MOTIONS: dict[str, dict[str, Any]] = {
     "dolly_in": {
         "id": "dolly_in",
         "label": "Dolly in",
-        "file": "ltx-2-19b-lora-camera-control-dolly-in.safetensors",
-        "bundle": CAMERA_BUNDLE,
+        "prompt_hint": "slow dolly in, camera pushing forward",
         "keywords": (
             "dolly in",
             "dolly-in",
@@ -37,8 +38,7 @@ CAMERA_MOTIONS: dict[str, dict[str, Any]] = {
     "dolly_out": {
         "id": "dolly_out",
         "label": "Dolly out",
-        "file": "ltx-2-19b-lora-camera-control-dolly-out.safetensors",
-        "bundle": CAMERA_BUNDLE,
+        "prompt_hint": "dolly out, camera pulling back",
         "keywords": (
             "dolly out",
             "dolly-out",
@@ -57,8 +57,7 @@ CAMERA_MOTIONS: dict[str, dict[str, Any]] = {
     "dolly_left": {
         "id": "dolly_left",
         "label": "Dolly left",
-        "file": "ltx-2-19b-lora-camera-control-dolly-left.safetensors",
-        "bundle": CAMERA_BUNDLE,
+        "prompt_hint": "dolly left, camera tracking left",
         "keywords": (
             "dolly left",
             "dolly-left",
@@ -74,8 +73,7 @@ CAMERA_MOTIONS: dict[str, dict[str, Any]] = {
     "dolly_right": {
         "id": "dolly_right",
         "label": "Dolly right",
-        "file": "ltx-2-19b-lora-camera-control-dolly-right.safetensors",
-        "bundle": CAMERA_BUNDLE,
+        "prompt_hint": "dolly right, camera tracking right",
         "keywords": (
             "dolly right",
             "dolly-right",
@@ -91,8 +89,7 @@ CAMERA_MOTIONS: dict[str, dict[str, Any]] = {
     "jib_up": {
         "id": "jib_up",
         "label": "Jib up",
-        "file": "ltx-2-19b-lora-camera-control-jib-up.safetensors",
-        "bundle": CAMERA_BUNDLE,
+        "prompt_hint": "jib up, camera rising",
         "keywords": (
             "jib up",
             "jib-up",
@@ -108,8 +105,7 @@ CAMERA_MOTIONS: dict[str, dict[str, Any]] = {
     "jib_down": {
         "id": "jib_down",
         "label": "Jib down",
-        "file": "ltx-2-19b-lora-camera-control-jib-down.safetensors",
-        "bundle": CAMERA_BUNDLE,
+        "prompt_hint": "jib down, camera descending",
         "keywords": (
             "jib down",
             "jib-down",
@@ -124,8 +120,7 @@ CAMERA_MOTIONS: dict[str, dict[str, Any]] = {
     "static": {
         "id": "static",
         "label": "Static",
-        "file": "ltx-2-19b-lora-camera-control-static.safetensors",
-        "bundle": CAMERA_BUNDLE,
+        "prompt_hint": "static camera, locked off, no camera movement",
         "keywords": (
             "static camera",
             "locked off",
@@ -145,13 +140,6 @@ IC_LORAS: dict[str, dict[str, Any]] = {
         "label": "Union Control (depth / canny / pose)",
         "file": "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
         "bundle": IC_UNION_BUNDLE,
-        "needs_video": True,
-    },
-    "detailer": {
-        "id": "detailer",
-        "label": "Detailer",
-        "file": "ltx-2-19b-ic-lora-detailer.safetensors",
-        "bundle": IC_DETAILER_BUNDLE,
         "needs_video": True,
     },
     "lipdub": {
@@ -196,14 +184,6 @@ CANNY_KEYWORDS = (
     "mechanical",
     "building facade",
 )
-DETAILER_KEYWORDS = (
-    "more detail",
-    "sharper",
-    "detailer",
-    "enhance details",
-    "fine detail",
-    "micro detail",
-)
 
 CAMERA_MOTION_VALUES = ("auto", "none", *CAMERA_MOTIONS)
 IC_LORA_VALUES = ("auto", "none", *IC_LORAS)
@@ -215,7 +195,11 @@ def list_camera_motions() -> list[dict[str, Any]]:
         {"id": "auto", "label": "Auto (from prompt)"},
         {"id": "none", "label": "None"},
         *[
-            {"id": spec["id"], "label": spec["label"], "file": spec["file"], "bundle": spec["bundle"]}
+            {
+                "id": spec["id"],
+                "label": spec["label"],
+                "promptHint": spec["prompt_hint"],
+            }
             for spec in CAMERA_MOTIONS.values()
         ],
     ]
@@ -288,10 +272,11 @@ def _match_control(prompt: str) -> str:
     return "depth"
 
 
-def _wants_detailer(prompt: str, detailer: bool) -> bool:
-    if detailer:
+def _prompt_already_has_camera(prompt: str, spec: dict[str, Any]) -> bool:
+    text = prompt.lower()
+    if spec["prompt_hint"].lower() in text:
         return True
-    return bool(_first_keyword_hit(prompt.lower(), DETAILER_KEYWORDS))
+    return bool(_first_keyword_hit(text, spec["keywords"]))
 
 
 def decide(
@@ -300,12 +285,11 @@ def decide(
     camera_motion: str | None = "auto",
     ic_lora: str | None = "auto",
     control_type: str | None = "auto",
-    detailer: bool = False,
     has_reference_video: bool = False,
     lora_strength: float = 1.0,
     ic_lora_strength: float = 1.0,
 ) -> dict[str, Any]:
-    """Pick at most one camera LoRA and optional IC-LoRA(s) from prompt + overrides."""
+    """Resolve camera language (prompt-only) and optional 2.3 IC-LoRA(s)."""
     camera_choice = _normalize_choice(camera_motion, CAMERA_MOTION_VALUES, "auto")
     ic_choice = _normalize_choice(ic_lora, IC_LORA_VALUES, "auto")
     control_choice = _normalize_choice(control_type, CONTROL_TYPE_VALUES, "auto")
@@ -323,49 +307,35 @@ def decide(
         camera_id = _match_camera(prompt)
         camera_source = "prompt" if camera_id else "none"
 
-    loras: list[dict[str, Any]] = []
-    bundles: list[str] = []
-    if camera_id:
+    prompt_hint: str | None = None
+    if camera_id and camera_source == "override":
         spec = CAMERA_MOTIONS[camera_id]
-        loras.append({"name": spec["file"], "strength": strength, "id": camera_id, "kind": "camera"})
-        bundles.append(spec["bundle"])
+        if not _prompt_already_has_camera(prompt, spec):
+            prompt_hint = spec["prompt_hint"]
 
     ic_ids: list[str] = []
     ic_skip: str | None = None
     resolved_control: str | None = None
     ic_source = "none"
 
-    wants_detailer = _wants_detailer(prompt, detailer)
-    if ic_choice == "none" and not wants_detailer:
+    if ic_choice == "none":
         ic_source = "override"
     elif not has_reference_video:
-        if ic_choice != "none" or wants_detailer:
+        if ic_choice != "none":
             ic_skip = "reference video required"
         ic_source = "skipped"
     else:
         if ic_choice == "union":
             ic_ids.append("union")
             ic_source = "override"
-        elif ic_choice == "detailer":
-            ic_ids.append("detailer")
-            ic_source = "override"
         elif ic_choice == "auto":
-            if wants_detailer and not (
-                _first_keyword_hit(prompt.lower(), POSE_KEYWORDS)
-                or _first_keyword_hit(prompt.lower(), CANNY_KEYWORDS)
-            ):
-                ic_ids.append("detailer")
-            else:
-                ic_ids.append("union")
+            ic_ids.append("union")
             ic_source = "prompt"
-        if wants_detailer and "detailer" not in ic_ids and ic_choice != "none":
-            ic_ids.append("detailer")
-            if ic_source == "none":
-                ic_source = "override" if detailer else "prompt"
         if "union" in ic_ids:
             resolved_control = control_choice if control_choice != "auto" else _match_control(prompt)
 
     ic_loras: list[dict[str, Any]] = []
+    bundles: list[str] = []
     for ic_id in ic_ids:
         spec = IC_LORAS[ic_id]
         ic_loras.append(
@@ -381,7 +351,8 @@ def decide(
     return {
         "camera_motion": camera_id,
         "camera_motion_source": camera_source,
-        "loras": loras,
+        "prompt_hint": prompt_hint,
+        "loras": [],
         "ic_lora": ic_ids[0] if ic_ids else None,
         "ic_loras": ic_loras,
         "ic_enabled": bool(ic_loras),

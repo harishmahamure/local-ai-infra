@@ -5,7 +5,7 @@ presets:
   - id: draft
     label: Draft
     description: Fast experiments. Lightning/Turbo and LTX distilled are allowed.
-    operations: [image.generate, image.upscale, video.generate, video.image_to_video, video.audio_to_video, video.first_last_frames, video.lipsync, video.motion_transfer]
+    operations: [image.generate, image.edit, image.controlled, image.layered, image.upscale, video.generate, video.image_to_video, video.audio_to_video, video.first_last_frames, video.lipsync, video.motion_transfer]
     parameters:
       steps: 4
       cfg: 1.0
@@ -19,7 +19,7 @@ presets:
   - id: balanced
     label: Balanced
     description: Production quality without every expensive stage.
-    operations: [image.generate, image.upscale, video.generate, video.image_to_video, video.audio_to_video, video.first_last_frames, video.lipsync, video.motion_transfer]
+    operations: [image.generate, image.edit, image.controlled, image.layered, image.upscale, video.generate, video.image_to_video, video.audio_to_video, video.first_last_frames, video.lipsync, video.motion_transfer]
     parameters:
       steps: 20
       cfg: 4.0
@@ -33,7 +33,7 @@ presets:
   - id: master
     label: Master
     description: Full-quality path. No rushing. No Lightning/Turbo on image.
-    operations: [image.generate, image.upscale, video.generate, video.image_to_video, video.audio_to_video, video.first_last_frames, video.lipsync, video.motion_transfer]
+    operations: [image.generate, image.edit, image.controlled, image.layered, image.upscale, video.generate, video.image_to_video, video.audio_to_video, video.first_last_frames, video.lipsync, video.motion_transfer]
     parameters:
       steps: 30
       cfg: 4.0

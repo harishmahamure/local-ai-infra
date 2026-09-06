@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from ...application.image_flows import FlowError, domain_flow_error, resolve_flow_plan
 from ...application.resolvers import resolve_dimensions
 from ...domain.jobs import Job
 from ...domain.presets import Preset
@@ -27,6 +28,12 @@ def _seed(job: Job) -> int:
 def build_plan(job: Job, workflow: WorkflowDefinition, preset: Preset, loras: list[dict[str, Any]]) -> dict[str, Any]:
     if workflow.builder == "qwen_txt2img":
         return _qwen_txt2img(job, preset, loras)
+    if workflow.builder == "qwen_edit":
+        return _qwen_edit(job, preset)
+    if workflow.builder == "qwen_control":
+        return _qwen_control(job, preset)
+    if workflow.builder == "qwen_layered":
+        return _qwen_layered(job, preset)
     if workflow.builder == "qwen_upscale":
         return _qwen_upscale(job, preset)
     if workflow.builder.startswith("ltx_"):
@@ -52,6 +59,75 @@ def _qwen_txt2img(job: Job, preset: Preset, loras: list[dict[str, Any]]) -> dict
         "upscale": False,
         "filename_prefix": "engine",
     }
+
+
+def _reference_count(job: Job) -> int:
+    refs = job.inputs.get("reference_images")
+    if isinstance(refs, list) and refs:
+        return len(refs)
+    if job.inputs.get("image"):
+        return 1
+    return 0
+
+
+def _overlay_numeric(plan: dict[str, Any], job: Job, _preset: Preset) -> dict[str, Any]:
+    """Keep flow-locked steps/CFG. Seed and negative prompt come from the job."""
+    if job.inputs.get("negative_prompt") or job.parameters.get("negative_prompt"):
+        plan["negative_prompt"] = str(job.inputs.get("negative_prompt") or job.parameters.get("negative_prompt") or "")
+    plan["seed"] = _seed(job)
+    plan["filename_prefix"] = "engine"
+    return plan
+
+
+def _qwen_edit(job: Job, preset: Preset) -> dict[str, Any]:
+    count = _reference_count(job)
+    flow = "merge" if count >= 2 else "text_edit"
+    try:
+        plan = resolve_flow_plan(
+            flow,
+            prompt=str(job.inputs.get("prompt") or ""),
+            image_count=count,
+            width=job.inputs.get("width") or job.parameters.get("width"),
+            height=job.inputs.get("height") or job.parameters.get("height"),
+            seed=_seed(job),
+        )
+    except FlowError as exc:
+        raise domain_flow_error(exc) from exc
+    return _overlay_numeric(plan, job, preset)
+
+
+def _qwen_control(job: Job, preset: Preset) -> dict[str, Any]:
+    try:
+        plan = resolve_flow_plan(
+            "control",
+            prompt=str(job.inputs.get("prompt") or ""),
+            image_count=1 if job.inputs.get("control_image") or job.inputs.get("image") else 0,
+            control_type=job.inputs.get("control_type"),
+            control_strength=job.inputs.get("control_strength") or job.parameters.get("control_strength"),
+            width=job.inputs.get("width") or job.parameters.get("width"),
+            height=job.inputs.get("height") or job.parameters.get("height"),
+            seed=_seed(job),
+        )
+    except FlowError as exc:
+        raise domain_flow_error(exc) from exc
+    return _overlay_numeric(plan, job, preset)
+
+
+def _qwen_layered(job: Job, preset: Preset) -> dict[str, Any]:
+    layers = job.inputs.get("layers")
+    try:
+        plan = resolve_flow_plan(
+            "layered",
+            prompt=str(job.inputs.get("prompt") or ""),
+            image_count=1 if job.inputs.get("image") else 0,
+            layers=int(layers) if layers is not None else None,
+            width=job.inputs.get("width") or job.parameters.get("width"),
+            height=job.inputs.get("height") or job.parameters.get("height"),
+            seed=_seed(job),
+        )
+    except FlowError as exc:
+        raise domain_flow_error(exc) from exc
+    return _overlay_numeric(plan, job, preset)
 
 
 def _qwen_upscale(job: Job, preset: Preset) -> dict[str, Any]:

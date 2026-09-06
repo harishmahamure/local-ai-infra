@@ -73,6 +73,44 @@ def test_submit_get_complete() -> None:
     assert "expires_at" in asset
 
 
+def test_image_edit_control_layered_jobs() -> None:
+    client = _client()
+    up = client.post("/v1/assets", files={"file": ("t.png", PNG, "image/png")})
+    asset_id = up.json()["asset_id"]
+    edit = client.post(
+        "/v1/jobs",
+        json={
+            "operation": "image.edit",
+            "preset": "master",
+            "inputs": {"prompt": "change the sign", "reference_images": [{"asset_id": asset_id}]},
+        },
+    )
+    assert edit.status_code == 202, edit.text
+    control = client.post(
+        "/v1/jobs",
+        json={
+            "operation": "image.controlled",
+            "preset": "balanced",
+            "inputs": {"prompt": "match this pose", "control_image": {"asset_id": asset_id}, "control_type": "pose"},
+        },
+    )
+    assert control.status_code == 202, control.text
+    layered = client.post(
+        "/v1/jobs",
+        json={
+            "operation": "image.layered",
+            "preset": "master",
+            "inputs": {"image": {"asset_id": asset_id}, "layers": 3},
+        },
+    )
+    assert layered.status_code == 202, layered.text
+    missing = client.post(
+        "/v1/jobs",
+        json={"operation": "image.edit", "preset": "master", "inputs": {"prompt": "no image"}},
+    )
+    assert missing.status_code == 400
+
+
 def test_upload_and_upscale() -> None:
     client = _client()
     up = client.post("/v1/assets", files={"file": ("t.png", PNG, "image/png")})
@@ -135,6 +173,15 @@ def test_health_and_ready() -> None:
     ready = client.get("/ready")
     assert ready.status_code == 200
     assert ready.json()["ready"] is True
+
+
+def test_legacy_generate_flow_validates() -> None:
+    client = _client()
+    missing = client.post("/api/v1/generate", json={"flow": "merge", "prompt": "combine these"})
+    assert missing.status_code == 422
+    ok = client.post("/api/v1/generate", json={"flow": "t2i", "prompt": "a quiet harbor"})
+    assert ok.status_code == 202, ok.text
+    assert ok.json().get("jobId")
 
 
 def test_legacy_status_still_present() -> None:

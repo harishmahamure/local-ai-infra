@@ -1,591 +1,1954 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
-  title: AI Inference Control API
-  version: 2.0.0
-  description: Manage GPU profiles, catalog downloads, LLM-planned image generation, and runtime status.
+  title: AI Media Inference Engine
+  description: 'Two surfaces on the same server:
+
+
+    - **Engine `/v1`** — catalog operations, job queue, assets, text chat.
+
+    - **Control `/api/v1`** — GPU profiles, catalog downloads, generate / upscale / LTX, cleanup.
+
+
+    Mac proxy: `http://127.0.0.1:8090` → GPU `http://192.168.50.100:8090`.
+
+    Interactive docs: `/docs` (Swagger) and `/redoc`.'
+  version: 3.0.0
 servers:
-  - url: http://192.168.50.100:8090
-    description: GPU box (direct)
-  - url: http://127.0.0.1:8090
-    description: Mac proxy (LAN)
+- url: http://127.0.0.1:8090
+  description: Mac proxy (LAN)
+- url: http://192.168.50.100:8090
+  description: GPU box (direct)
 paths:
+  /v1/jobs:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Submit a catalog job
+      description: Queue an implemented operation (image.generate, video.generate, text.chat, …). Pass
+        Idempotency-Key to replay the same accept response. Inputs use asset_id, not filesystem paths.
+      operationId: submit_job_v1_jobs_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitJobRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/jobs/{job_id}:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: Get job status
+      description: 'Public job record: status, phase, progress, artifacts, error.'
+      operationId: get_job_v1_jobs__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/jobs/{job_id}/events:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: Job event stream (SSE)
+      description: Server-sent events for job.progress, job.completed, job.failed, job.cancelled. Keepalive
+        comments every 15s.
+      operationId: job_events_v1_jobs__job_id__events_get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/jobs/{job_id}/cancel:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Cancel a job
+      operationId: cancel_job_v1_jobs__job_id__cancel_post
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/jobs/{job_id}/retry:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Retry a job
+      description: 'strategy: same | new_seed | override | rerun_stage. override may send new parameters;
+        rerun_stage needs stage.'
+      operationId: retry_job_v1_jobs__job_id__retry_post
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetryJobRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/operations:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: List operations
+      description: Catalog operations with available flags and input schemas.
+      operationId: list_operations_v1_operations_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/capabilities:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: Engine capabilities
+      operationId: list_capabilities_v1_capabilities_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/presets:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: List presets
+      operationId: list_presets_v1_presets_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/models:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: List catalog models
+      operationId: list_models_v1_models_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/models/{model_id}:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: Get one catalog model
+      operationId: get_model_v1_models__model_id__get
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/models/{model_id}/download:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Start model download
+      operationId: download_model_v1_models__model_id__download_post
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/models/{model_id}/verify:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Verify model files on disk
+      operationId: verify_model_v1_models__model_id__verify_post
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/models/{model_id}/load:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Load model onto the GPU
+      operationId: load_model_v1_models__model_id__load_post
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/models/{model_id}/unload:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Unload model from the GPU
+      operationId: unload_model_v1_models__model_id__unload_post
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/models/{model_id}/start:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Start model (alias of load)
+      operationId: start_model_v1_models__model_id__start_post
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/models/{model_id}/stop:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Stop model (alias of unload)
+      operationId: stop_model_v1_models__model_id__stop_post
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/text/models:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: List text/vision chat models
+      operationId: list_text_models_v1_text_models_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/text/chat:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Text + vision chat
+      description: Synchronous JSON or SSE when stream=true. Starts llama-fast or gemma as needed. Not
+        a Comfy job.
+      operationId: text_chat_v1_text_chat_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TextChatRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/loras:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: List LoRAs
+      operationId: list_loras_v1_loras_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/workflows:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: List workflows
+      operationId: list_workflows_v1_workflows_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/workflows/{workflow_id}:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: Get one workflow
+      operationId: get_workflow_v1_workflows__workflow_id__get
+      parameters:
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workflow Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/workflows/{workflow_id}/validate:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Validate a workflow binding
+      operationId: validate_workflow_v1_workflows__workflow_id__validate_post
+      parameters:
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workflow Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/assets:
+    post:
+      tags:
+      - Engine (/v1)
+      summary: Upload an asset
+      description: Multipart file upload. Returns asset_id for job inputs.
+      operationId: upload_asset_v1_assets_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_asset_v1_assets_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/assets/{asset_id}:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: Get asset metadata
+      operationId: get_asset_v1_assets__asset_id__get
+      parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Asset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Engine (/v1)
+      summary: Delete an asset
+      operationId: delete_asset_v1_assets__asset_id__delete
+      parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Asset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/runtime:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: Engine runtime snapshot
+      operationId: runtime_v1_runtime_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /ready:
+    get:
+      tags:
+      - Engine (/v1)
+      - Health
+      summary: Readiness probe
+      description: 200 if the engine can accept work; 503 otherwise.
+      operationId: ready_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /api/v1/status:
     get:
-      summary: Runtime and GPU status
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: GPU runtime status
+      description: loadState, active profile, VRAM, process list.
+      operationId: api_status_api_v1_status_get
       responses:
-        "200":
-          description: Load state, active profile, GPU memory
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Api Status Api V1 Status Get
   /api/v1/models:
     get:
-      summary: Catalog download status on disk
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Catalog files on disk
+      description: 'Each bundle: complete | partial | missing plus per-file state.'
+      operationId: api_models_api_v1_models_get
       responses:
-        "200":
-          description: Bundle list with complete/partial/missing
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Api Models Api V1 Models Get
   /api/v1/capabilities:
     get:
-      summary: Image generation presets, modes, LoRA readiness, LTX video, and workflows
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Control UI capabilities
+      description: Image presets, LTX video, upscale, character-master readiness.
+      operationId: api_capabilities_api_v1_capabilities_get
       responses:
-        "200":
-          description: Presets list with ready flags, supported modes, loras, ltxVideo, workflows.characterMaster
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Api Capabilities Api V1 Capabilities Get
   /api/v1/generate:
     post:
-      summary: Queue LLM-planned image generation (async)
-      description: |
-        Multi-prompt batch (`prompts[]`): planner loads Gemma once for text and vision,
-        then Comfy executes all items sequentially (2 GPU profile switches total).
-        Same-prompt shorthand (`prompt` + `count`) expands to N items with seed offsets.
-        If both `prompts` and `prompt` are sent, `prompts` takes precedence.
-        Partial failures continue remaining items.
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Queue image generation
+      description: Multi-prompt batch (`prompts[]`) or shorthand (`prompt` + `count`). Gemma plans once,
+        then Comfy runs items. Partial failures continue.
+      operationId: api_generate_post_api_v1_generate_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                prompts:
-                  type: array
-                  minItems: 1
-                  maxItems: 10
-                  description: Multi-prompt batch (preferred when set)
-                  items:
-                    type: object
-                    properties:
-                      prompt:
-                        type: string
-                      image:
-                        type: string
-                      plan:
-                        type: object
-                      seed:
-                        type: integer
-                      width:
-                        type: integer
-                      height:
-                        type: integer
-                      fastGenMode:
-                        type: boolean
-                      steps:
-                        type: integer
-                        nullable: true
-                        description: Omit or null for auto; integer to override planner/preset
-                prompt:
-                  type: string
-                  description: Natural language image request (shorthand mode)
-                image:
-                  type: string
-                  description: Optional base64 or data URL reference image
-                plan:
-                  type: object
-                  description: Optional explicit plan (bypasses LLM planner)
-                seed:
-                  type: integer
-                width:
-                  type: integer
-                height:
-                  type: integer
-                count:
-                  type: integer
-                  minimum: 1
-                  maximum: 10
-                  default: 1
-                  description: Same-prompt batch size (shorthand mode)
-                fastGenMode:
-                  type: boolean
-                  nullable: true
-                  description: Omit or null for auto; true forces Lightning 4-step defaults when steps is auto
-                steps:
-                  type: integer
-                  nullable: true
-                  description: Omit or null for auto; integer to override planner/preset steps
-                upscale:
-                  type: boolean
-                  nullable: true
-                  description: Omit or null for auto; true adds 4× RealESRGAN after generation
+              $ref: '#/components/schemas/GenerateRequest'
+        required: true
       responses:
-        "202":
-          description: Job queued with items[] (planning → switching → running)
-        "422":
-          description: Validation error
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/generate/{job_id}/images/{filename}:
     get:
-      summary: Download a persisted job output image
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Download generate output image
+      operationId: api_generate_image_api_v1_generate__job_id__images__filename__get
       parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: filename
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Filename
       responses:
-        "200":
-          description: PNG/JPEG file from jobs/{job_id}/images/
-        "404":
-          description: Unknown job or image
-  /api/v1/generate/{job_id}:
-    get:
-      summary: Poll generation job status and output URLs
-      parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Job with total/completedCount/failedCount, items[] per-prompt status and images[] urls
-        "404":
-          description: Unknown job
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/workflows/character-master:
     post:
-      summary: Queue WF_01 Character Master candidates (async)
-      description: |
-        Generate locked character-identity candidates with Qwen Image 2512.
-        MASTER uses full-quality inference (no Lightning/Turbo). DRAFT may use Lightning.
-        Planner enriches the prompt only; preset and LoRAs are locked by quality.
-        After completion, POST .../select to promote a candidate to CHARACTER_MASTER.png.
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Queue Character Master candidates
+      operationId: api_character_master_post_api_v1_workflows_character_master_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [characterDescription]
-              properties:
-                characterDescription:
-                  type: string
-                style:
-                  type: string
-                quality:
-                  type: string
-                  enum: [draft, master]
-                  default: master
-                aspectRatio:
-                  type: string
-                  enum: ["9:16", "16:9", "1:1", "4:5"]
-                  default: "9:16"
-                width:
-                  type: integer
-                  minimum: 256
-                  maximum: 4096
-                height:
-                  type: integer
-                  minimum: 256
-                  maximum: 4096
-                seed:
-                  type: integer
-                candidateCount:
-                  type: integer
-                  minimum: 1
-                  maximum: 8
-                image:
-                  type: string
-                  description: Optional base64 or data URL reference (img2img)
-                denoise:
-                  type: number
-                  minimum: 0
-                  maximum: 1
-                  description: Requires image; default 0.65
-                realismLora:
-                  description: Optional realism LoRA strength 0-1; default off
-                  oneOf:
-                    - type: number
-                      minimum: 0
-                      maximum: 1
-                    - type: boolean
-                upscale:
-                  type: boolean
-                  default: false
-                characterId:
-                  type: string
+              $ref: '#/components/schemas/CharacterMasterRequest'
+        required: true
       responses:
-        "202":
-          description: Job queued (planning → switching → running)
-        "409":
-          description: Models missing or ComfyUI not loaded
-        "422":
-          description: Validation error or MASTER Lightning/Turbo forbidden
-  /api/v1/workflows/character-master/{job_id}:
-    get:
-      summary: Poll Character Master job status
-      parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Job with candidates[], selected, metadata
-        "404":
-          description: Unknown job
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/workflows/character-master/{job_id}/images/{filename}:
     get:
-      summary: Download a Character Master candidate image
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Download Character Master image
+      operationId: api_character_master_image_api_v1_workflows_character_master__job_id__images__filename__get
       parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: filename
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Filename
       responses:
-        "200":
-          description: PNG from jobs/{job_id}/images/
-        "404":
-          description: Unknown job or image
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/workflows/character-master/{job_id}:
+    get:
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Poll Character Master job
+      operationId: api_character_master_get_api_v1_workflows_character_master__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/workflows/character-master/{job_id}/select:
     post:
-      summary: Promote a candidate to CHARACTER_MASTER
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Promote a Character Master candidate
+      operationId: api_character_master_select_api_v1_workflows_character_master__job_id__select_post
       parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [candidateIndex]
-              properties:
-                candidateIndex:
-                  type: integer
-                  minimum: 0
-                  maximum: 7
+              $ref: '#/components/schemas/CharacterMasterSelectRequest'
       responses:
-        "200":
-          description: Job with selected asset pointers
-        "404":
-          description: Unknown job or candidate
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/assets/characters/{character_id}:
     get:
-      summary: Load a persisted character asset
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Load persisted character asset
+      operationId: api_character_asset_api_v1_assets_characters__character_id__get
       parameters:
-        - name: character_id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: character_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Character Id
       responses:
-        "200":
-          description: Character directory, candidates, metadata
-        "404":
-          description: Unknown character
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/assets/characters/{character_id}/files/{filename}:
     get:
-      summary: Download CHARACTER_MASTER.png or a candidate file
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Download character file
+      operationId: api_character_asset_file_api_v1_assets_characters__character_id__files__filename__get
       parameters:
-        - name: character_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: filename
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: character_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Character Id
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Filename
       responses:
-        "200":
-          description: Image file
-        "404":
-          description: Unknown file
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/generate/{job_id}:
+    get:
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Poll generate job
+      operationId: api_generate_get_api_v1_generate__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/upscale:
     post:
-      summary: Queue RealESRGAN upscale job (async)
-      description: |
-        Upscale an uploaded image or a prior generate job output via ComfyUI RealESRGAN.
-        No LLM planner — loads Comfy directly.
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Queue RealESRGAN upscale
+      operationId: api_upscale_post_api_v1_upscale_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                image:
-                  type: string
-                  description: Base64 or data URL (required unless sourceJobId+sourceFilename)
-                sourceJobId:
-                  type: string
-                  description: Prior generate job UUID
-                sourceFilename:
-                  type: string
-                  description: Filename from jobs/{sourceJobId}/images/
-                scale:
-                  type: integer
-                  enum: [2, 4]
-                  default: 4
+              $ref: '#/components/schemas/UpscaleRequest'
+        required: true
       responses:
-        "202":
-          description: Upscale job queued
-        "404":
-          description: Source image not found
-        "422":
-          description: Validation error
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/upscale/{job_id}/images/{filename}:
     get:
-      summary: Download a persisted upscale job output image
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Download upscale output image
+      operationId: api_upscale_image_api_v1_upscale__job_id__images__filename__get
       parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: filename
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Filename
       responses:
-        "200":
-          description: PNG/JPEG file from jobs/{job_id}/images/
-        "404":
-          description: Unknown job or image
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/upscale/{job_id}:
     get:
-      summary: Poll upscale job status and output URLs
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Poll upscale job
+      operationId: api_upscale_get_api_v1_upscale__job_id__get
       parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
       responses:
-        "200":
-          description: Job with scale, plan, images[] urls
-        "404":
-          description: Unknown job
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/ltx-video:
     post:
-      summary: Queue LTX-2.5 video with synchronized audio
-      description: |
-        Text-to-video or image-to-video via ComfyUI LTX on port 8189.
-        Prompts are sent verbatim unless `promptEnhance=true` (LTX Studio TextGenerateLTX2Prompt).
-        audioPrompt is strongly recommended — without it the model may invent background music.
-        Speed **quality** or preset **ltx_studio** runs the same 2-stage refine pipeline as
-        ComfyUI `LTX-2.5-Quality-T2V.json` (requires `ltx-2.5-studio` bundle).
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Queue LTX-2.5 video
+      description: t2v / i2v / a2v / flf2v / lipsync / motion_transfer on Comfy LTX :8189. Duration 1–30s.
+        Camera is prompt-only. audioPrompt recommended.
+      operationId: api_ltx_video_post_api_v1_ltx_video_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                mode:
-                  type: string
-                  enum: [t2v, i2v]
-                  default: t2v
-                prompt:
-                  type: string
-                audioPrompt:
-                  type: string
-                  description: Explicit sound design; use "silent, no sound" for silence
-                image:
-                  type: string
-                  description: Base64 or data URL (required for i2v)
-                sourceJobId:
-                  type: string
-                sourceFilename:
-                  type: string
-                duration:
-                  type: number
-                  minimum: 1
-                  maximum: 10
-                preset:
-                  type: string
-                  description: ltx_reel | ltx_landscape | ltx_square | ltx_quality | ltx_studio | ltx_fast
-                orientation:
-                  type: string
-                  enum: [portrait, landscape, square]
-                  description: Sets width×height when preset is not explicit
-                speed:
-                  type: string
-                  enum: [fast, standard, quality]
-                  description: fast=12 steps; standard=20 steps; quality=28 steps+LTX Studio refine (HD resolution for all)
-                plan:
-                  type: object
-                  description: Explicit plan (bypasses preset merge)
-                seed:
-                  type: integer
-                width:
-                  type: integer
-                  minimum: 256
-                  maximum: 2048
-                height:
-                  type: integer
-                  minimum: 256
-                  maximum: 2048
-                length:
-                  type: integer
-                  minimum: 17
-                  maximum: 241
-                  description: Frame count; snapped to 8k+1 (duration × fps + 1)
-                fps:
-                  type: number
-                steps:
-                  type: integer
-                videoCfg:
-                  type: number
-                  description: Distilled LTX uses 1.0; higher values over-saturate and blur
-                audioCfg:
-                  type: number
-                  description: Distilled LTX uses 1.0
-                negativePrompt:
-                  type: string
-                samplerName:
-                  type: string
-                maxShift:
-                  type: number
-                baseShift:
-                  type: number
-                terminal:
-                  type: number
-                stretch:
-                  type: boolean
-                strength:
-                  type: number
-                  description: I2V image conditioning strength (0–1)
-                refine:
-                  type: boolean
-                  description: Enable 2-stage latent upscale refine
-                refineSteps:
-                  type: integer
-                refineDenoise:
-                  type: number
-                tiledDecode:
-                  type: boolean
-                  description: Use tiled VAE decode (lower VRAM)
-                promptEnhance:
-                  type: boolean
-                  description: |
-                    Expand prompt with LTX Studio TextGenerateLTX2Prompt (same as ComfyUI prompt_enhance).
-                    Requires ltx-2.5-prompt-enhancer bundle.
-                cameraMotion:
-                  type: string
-                  enum: [auto, none, dolly_in, dolly_out, dolly_left, dolly_right, jib_up, jib_down, static]
-                  description: Official camera LoRA. auto picks from the prompt. Do not apply the distilled LoRA on the distilled transformer.
-                referenceVideo:
-                  type: string
-                  description: Base64 or data URL of a reference video (required for IC-LoRA / Detailer)
-                icLora:
-                  type: string
-                  enum: [auto, none, union, detailer]
-                  description: Union Control or Detailer IC-LoRA. Skipped unless referenceVideo is set.
-                controlType:
-                  type: string
-                  enum: [auto, depth, canny, pose]
-                  description: Annotator for Union Control. auto picks from the prompt (default depth).
-                detailer:
-                  type: boolean
-                  description: Also apply the Detailer IC-LoRA when a reference video is present
-                loraStrength:
-                  type: number
-                  minimum: 0
-                  maximum: 2
-                  description: Camera LoRA strength (default 1.0)
-                icLoraStrength:
-                  type: number
-                  minimum: 0
-                  maximum: 1
-                  description: IC-LoRA strength (default 1.0)
+              $ref: '#/components/schemas/LtxVideoRequest'
+        required: true
       responses:
-        "202":
-          description: Job queued (switching → load_models → encode → sample → refine → decode → export)
-        "422":
-          description: Validation error
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/ltx-video/{job_id}/videos/{filename}:
     get:
-      summary: Download a persisted LTX MP4 (with audio)
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Download LTX MP4
+      operationId: api_ltx_video_file_api_v1_ltx_video__job_id__videos__filename__get
       parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: filename
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Filename
       responses:
-        "200":
-          description: MP4 from jobs/{job_id}/videos/
-        "404":
-          description: Unknown job or video
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/ltx-video/{job_id}:
     get:
-      summary: Poll LTX video job status
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Poll LTX video job
+      operationId: api_ltx_video_get_api_v1_ltx_video__job_id__get
       parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
       responses:
-        "200":
-          description: Job with plan, videos[], status, phase
-        "404":
-          description: Unknown job
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/downloads:
     get:
-      summary: Download job status
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Catalog download status
+      operationId: api_downloads_get_api_v1_downloads_get
       responses:
-        "200":
-          description: idle | running | completed | failed plus log tail
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Api Downloads Get Api V1 Downloads Get
     post:
-      summary: Start background catalog download
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Start catalog download
+      operationId: api_downloads_post_api_v1_downloads_post
       requestBody:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                ids:
-                  type: array
-                  items:
-                    type: string
+              $ref: '#/components/schemas/DownloadRequest'
+        required: true
       responses:
-        "202":
-          description: Download started
-        "409":
-          description: Download already running
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/cleanup:
+    get:
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: List generated media on GPU
+      operationId: api_cleanup_get_api_v1_cleanup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Api Cleanup Get Api V1 Cleanup Get
+    post:
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Delete generated images/videos
+      operationId: api_cleanup_post_api_v1_cleanup_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CleanupRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/profile:
     put:
-      summary: Switch to one GPU profile (exclusive)
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Start exclusive GPU profile
+      operationId: api_profile_put_api_v1_profile_put
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [id]
-              properties:
-                id:
-                  type: string
-                  enum: [llama-fast, gemma, comfy, comfy-ltx]
+              $ref: '#/components/schemas/ProfileRequest'
+        required: true
       responses:
-        "200":
-          description: Profile started
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
-      summary: Stop all inference profiles
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: Stop all GPU profiles
+      operationId: api_profile_delete_api_v1_profile_delete
       responses:
-        "204":
-          description: GPU idle
+        '204':
+          description: Successful Response
+  /health:
+    get:
+      tags:
+      - Control UI (legacy /api/v1)
+      - Health
+      summary: Liveness probe
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
   /api/v1/urls:
     get:
-      summary: LAN endpoint URLs
+      tags:
+      - Control UI (legacy /api/v1)
+      summary: LAN service URLs
+      operationId: api_urls_api_v1_urls_get
       responses:
-        "200":
-          description: llm, comfy, comfyLtx, control URLs
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Api Urls Api V1 Urls Get
+components:
+  schemas:
+    Body_upload_asset_v1_assets_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_upload_asset_v1_assets_post
+    CharacterMasterRequest:
+      properties:
+        characterDescription:
+          type: string
+          title: Characterdescription
+        style:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Style
+        quality:
+          type: string
+          enum:
+          - draft
+          - master
+          title: Quality
+          default: master
+        aspectRatio:
+          type: string
+          enum:
+          - '9:16'
+          - '16:9'
+          - '1:1'
+          - '4:5'
+          title: Aspectratio
+          default: '9:16'
+        width:
+          anyOf:
+          - type: integer
+            maximum: 4096.0
+            minimum: 256.0
+          - type: 'null'
+          title: Width
+        height:
+          anyOf:
+          - type: integer
+            maximum: 4096.0
+            minimum: 256.0
+          - type: 'null'
+          title: Height
+        seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Seed
+        candidateCount:
+          anyOf:
+          - type: integer
+            maximum: 8.0
+            minimum: 1.0
+          - type: 'null'
+          title: Candidatecount
+        image:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image
+        denoise:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Denoise
+        realismLora:
+          anyOf:
+          - type: number
+          - type: boolean
+          - type: 'null'
+          title: Realismlora
+          description: Optional realism LoRA strength 0-1; default off
+          default: false
+        upscale:
+          type: boolean
+          title: Upscale
+          default: false
+        characterId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Characterid
+      type: object
+      required:
+      - characterDescription
+      title: CharacterMasterRequest
+    CharacterMasterSelectRequest:
+      properties:
+        candidateIndex:
+          type: integer
+          maximum: 7.0
+          minimum: 0.0
+          title: Candidateindex
+      type: object
+      required:
+      - candidateIndex
+      title: CharacterMasterSelectRequest
+    CleanupRequest:
+      properties:
+        targets:
+          items:
+            type: string
+          type: array
+          title: Targets
+          description: images, videos, and/or comfy_outputs
+      type: object
+      title: CleanupRequest
+    DownloadRequest:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+          description: Catalog bundle ids; empty means all remaining
+      type: object
+      title: DownloadRequest
+    GenerateRequest:
+      properties:
+        prompt:
+          type: string
+          title: Prompt
+          description: Natural-language image request (shorthand when prompts is omitted)
+          default: ''
+        image:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image
+          description: Optional base64 or data URL reference image
+        images:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Images
+          description: Extra references for merge (2–3) or extra uploads
+        plan:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Plan
+          description: Explicit plan; skips the Gemma planner
+        flow:
+          anyOf:
+          - type: string
+            pattern: ^(t2i|text_edit|merge|semantic_edit|layered|control|lightning)$
+          - type: 'null'
+          title: Flow
+        controlType:
+          anyOf:
+          - type: string
+            pattern: ^(pose|depth|canny)$
+          - type: 'null'
+          title: Controltype
+        controlStrength:
+          anyOf:
+          - type: number
+            maximum: 2.0
+            minimum: 0.0
+          - type: 'null'
+          title: Controlstrength
+        layers:
+          anyOf:
+          - type: integer
+            maximum: 8.0
+            minimum: 1.0
+          - type: 'null'
+          title: Layers
+        seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Seed
+        width:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Width
+        height:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Height
+        count:
+          type: integer
+          maximum: 10.0
+          minimum: 1.0
+          title: Count
+          description: Same-prompt batch size (shorthand mode)
+          default: 1
+        prompts:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/PromptItem'
+            type: array
+          - type: 'null'
+          title: Prompts
+          description: Multi-prompt batch (preferred). Takes precedence over prompt.
+        fastGenMode:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Fastgenmode
+          description: Omit or null for auto; true forces Lightning 4-step
+        steps:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Steps
+          description: Omit or null for auto; integer to override
+        upscale:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Upscale
+          description: Omit or null for auto; true/false to override
+      type: object
+      title: GenerateRequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    LtxVideoRequest:
+      properties:
+        mode:
+          type: string
+          pattern: ^(t2v|i2v|a2v|flf2v|lipsync|motion_transfer)$
+          title: Mode
+          default: t2v
+        prompt:
+          type: string
+          title: Prompt
+          default: ''
+        audioPrompt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Audioprompt
+          description: Sound design; use "silent, no sound" for silence
+        image:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image
+          description: Base64 or data URL start frame (required for i2v)
+        endImage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Endimage
+          description: Last-frame image for flf2v
+        middleImage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Middleimage
+          description: Optional mid-clip keyframe
+        audio:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Audio
+          description: Base64 or data URL audio for lipsync / a2v
+        sourceJobId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sourcejobid
+        sourceFilename:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sourcefilename
+        duration:
+          anyOf:
+          - type: number
+            maximum: 30.0
+            minimum: 1.0
+          - type: 'null'
+          title: Duration
+          description: Clip length in seconds (1–30)
+        preset:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Preset
+          description: ltx_reel | ltx_landscape | ltx_square | ltx_quality | ltx_studio | ltx_fast
+        orientation:
+          anyOf:
+          - type: string
+            pattern: ^(portrait|landscape|square)$
+          - type: 'null'
+          title: Orientation
+        speed:
+          anyOf:
+          - type: string
+            pattern: ^(fast|standard|quality)$
+          - type: 'null'
+          title: Speed
+          description: fast=12 steps; standard=20; quality=28+refine
+        plan:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Plan
+          description: Explicit plan; skips preset merge
+        seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Seed
+        width:
+          anyOf:
+          - type: integer
+            maximum: 2048.0
+            minimum: 256.0
+          - type: 'null'
+          title: Width
+        height:
+          anyOf:
+          - type: integer
+            maximum: 2048.0
+            minimum: 256.0
+          - type: 'null'
+          title: Height
+        length:
+          anyOf:
+          - type: integer
+            maximum: 897.0
+            minimum: 17.0
+          - type: 'null'
+          title: Length
+          description: Frame count snapped to 8k+1. 30s @ 24fps = 721
+        fps:
+          anyOf:
+          - type: number
+            maximum: 30.0
+            minimum: 16.0
+          - type: 'null'
+          title: Fps
+        steps:
+          anyOf:
+          - type: integer
+            maximum: 60.0
+            minimum: 1.0
+          - type: 'null'
+          title: Steps
+        videoCfg:
+          anyOf:
+          - type: number
+            maximum: 15.0
+            minimum: 1.0
+          - type: 'null'
+          title: Videocfg
+          description: Distilled LTX uses 1.0
+        audioCfg:
+          anyOf:
+          - type: number
+            maximum: 15.0
+            minimum: 1.0
+          - type: 'null'
+          title: Audiocfg
+          description: Distilled LTX uses 1.0
+        negativePrompt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Negativeprompt
+        samplerName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Samplername
+        maxShift:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Maxshift
+        baseShift:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Baseshift
+        terminal:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Terminal
+        stretch:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Stretch
+        strength:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Strength
+          description: I2V image conditioning (0–1)
+        refine:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Refine
+          description: 2-stage latent upscale refine
+        refineSteps:
+          anyOf:
+          - type: integer
+            maximum: 40.0
+            minimum: 1.0
+          - type: 'null'
+          title: Refinesteps
+        refineDenoise:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.05
+          - type: 'null'
+          title: Refinedenoise
+        tiledDecode:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Tileddecode
+          description: Tiled VAE decode (lower VRAM)
+        promptEnhance:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Promptenhance
+          description: Expand prompt with LTX Studio TextGenerateLTX2Prompt
+        cameraMotion:
+          anyOf:
+          - type: string
+            pattern: ^(auto|none|dolly_in|dolly_out|dolly_left|dolly_right|jib_up|jib_down|static)$
+          - type: 'null'
+          title: Cameramotion
+          description: Prompt-only camera language. LTX-2 19B camera LoRAs are not loaded on 2.5.
+        referenceVideo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Referencevideo
+          description: Base64 or data URL reference video for IC-LoRA
+        icLora:
+          anyOf:
+          - type: string
+            pattern: ^(auto|none|union)$
+          - type: 'null'
+          title: Iclora
+          description: LTX-2.3 Union Control IC-LoRA; skipped without referenceVideo
+        controlType:
+          anyOf:
+          - type: string
+            pattern: ^(auto|depth|canny|pose)$
+          - type: 'null'
+          title: Controltype
+        loraStrength:
+          anyOf:
+          - type: number
+            maximum: 2.0
+            minimum: 0.0
+          - type: 'null'
+          title: Lorastrength
+          description: Unused on LTX-2.5 (camera is prompt-only)
+        icLoraStrength:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Iclorastrength
+      type: object
+      title: LtxVideoRequest
+    ProfileRequest:
+      properties:
+        id:
+          type: string
+          pattern: ^(llama-fast|comfy|comfy-ltx|gemma)$
+          title: Id
+          description: Exclusive GPU profile
+      type: object
+      required:
+      - id
+      title: ProfileRequest
+    PromptItem:
+      properties:
+        prompt:
+          type: string
+          title: Prompt
+          default: ''
+        image:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image
+        images:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Images
+        plan:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Plan
+        flow:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Flow
+        controlType:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Controltype
+        controlStrength:
+          anyOf:
+          - type: number
+            maximum: 2.0
+            minimum: 0.0
+          - type: 'null'
+          title: Controlstrength
+        layers:
+          anyOf:
+          - type: integer
+            maximum: 8.0
+            minimum: 1.0
+          - type: 'null'
+          title: Layers
+        seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Seed
+        width:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Width
+        height:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Height
+        fastGenMode:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Fastgenmode
+        steps:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Steps
+          description: Omit or null for auto; integer to override
+        upscale:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Upscale
+          description: Omit or null for auto; true/false to override
+      type: object
+      title: PromptItem
+    RetryJobRequest:
+      properties:
+        strategy:
+          type: string
+          enum:
+          - same
+          - new_seed
+          - override
+          - rerun_stage
+          title: Strategy
+          default: same
+        parameters:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Parameters
+        stage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stage
+      type: object
+      title: RetryJobRequest
+    SubmitJobRequest:
+      properties:
+        operation:
+          type: string
+          title: Operation
+          description: Catalog operation id, e.g. image.generate, video.generate, video.lipsync
+        preset:
+          type: string
+          title: Preset
+          description: draft | balanced | master | character_master | …
+          default: master
+        inputs:
+          additionalProperties: true
+          type: object
+          title: Inputs
+          description: Operation inputs. Use {asset_id} objects for files, not filesystem paths.
+        parameters:
+          additionalProperties: true
+          type: object
+          title: Parameters
+          description: seed, steps, cfg, loras, duration_seconds, …
+        client_context:
+          additionalProperties: true
+          type: object
+          title: Client Context
+        output:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Output
+      type: object
+      required:
+      - operation
+      title: SubmitJobRequest
+    TextChatMessage:
+      properties:
+        role:
+          type: string
+          title: Role
+        content:
+          title: Content
+      type: object
+      required:
+      - role
+      - content
+      title: TextChatMessage
+    TextChatRequest:
+      properties:
+        model:
+          type: string
+          title: Model
+          description: gemma-4-e4b or qwen36-35b-a3b-rq
+        messages:
+          items:
+            $ref: '#/components/schemas/TextChatMessage'
+          type: array
+          title: Messages
+        temperature:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Temperature
+        max_tokens:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Tokens
+        stream:
+          type: boolean
+          title: Stream
+          description: If true, response is text/event-stream
+          default: false
+      type: object
+      required:
+      - model
+      - messages
+      title: TextChatRequest
+    UpscaleRequest:
+      properties:
+        image:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image
+        sourceJobId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sourcejobid
+        sourceFilename:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sourcefilename
+        scale:
+          type: integer
+          enum:
+          - 2
+          - 4
+          title: Scale
+          description: 'RealESRGAN scale factor: 2 or 4'
+          default: 4
+      type: object
+      title: UpscaleRequest
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+tags:
+- name: Health
+  description: Liveness and readiness.
+- name: Engine (/v1)
+  description: 'Stable engine API: jobs, catalog, assets, text chat.'
+- name: Control UI (legacy /api/v1)
+  description: Control dashboard API used by the static UI.

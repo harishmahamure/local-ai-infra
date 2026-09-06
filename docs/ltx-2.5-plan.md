@@ -67,10 +67,8 @@ Older blueprints under `~/ComfyUI-ltx/blueprints/` tagged LTX 2.0/2.3 are obsole
    # Optional: ComfyUI built-in prompt enhancer (enable prompt_enhance in workflow)
    ./bin/ai download ltx-2.5-prompt-enhancer
 
-   # Official camera LoRAs (~15 GB) and IC-LoRAs
-   ./bin/ai download ltx-camera-loras
+   # Official LTX-2.3 IC-LoRAs (documented compatible with 2.5)
    ./bin/ai download ltx-iclora-union
-   ./bin/ai download ltx-iclora-detailer
    ./bin/ai download ltx-iclora-lipdub
    ./bin/ai download ltx-iclora-motion-track
    ```
@@ -97,7 +95,7 @@ curl -X POST http://127.0.0.1:8090/api/v1/ltx-video \
     "duration": 4
   }'
 
-# With optional prompt enhancer + auto camera LoRA from the prompt
+# With optional prompt enhancer + camera language from the prompt
 curl -X POST http://127.0.0.1:8090/api/v1/ltx-video \
   -H 'Content-Type: application/json' \
   -d '{
@@ -140,9 +138,9 @@ curl http://127.0.0.1:8090/api/v1/ltx-video/{jobId}
 | `prompt` | Scene / motion description (verbatim) |
 | `audioPrompt` | Sound design (verbatim) |
 | `preset` | `ltx_reel`, `ltx_landscape`, `ltx_square`, `ltx_quality`, `ltx_studio`, `ltx_fast` |
-| `duration` | Seconds (1–10); converted to `length = duration × fps + 1`, then snapped to 8k+1 |
+| `duration` | Seconds (1–30); converted to `length = duration × fps + 1`, then snapped to 8k+1 |
 | `width`, `height` | Pixels (256–2048); aligned to 64 when `refine=true` |
-| `length` | Frame count (17–241); must be 8k+1 (17, 25, …, 193, 241) |
+| `length` | Frame count (17–897); must be 8k+1. 30s at 24fps is 721 frames. |
 | `steps`, `videoCfg`, `audioCfg` | Distilled model uses CFG 1.0 / 1.0 — higher values over-saturate and blur |
 | `samplerName`, `maxShift`, `baseShift`, `terminal`, `stretch` | LTX scheduler tuning |
 | `strength` | I2V image conditioning strength (0–1) |
@@ -150,12 +148,11 @@ curl http://127.0.0.1:8090/api/v1/ltx-video/{jobId}
 | `refineSteps`, `refineDenoise` | Second-stage sampling |
 | `tiledDecode` | Use tiled VAE decode (lower VRAM) |
 | `promptEnhance` | LTX Studio prompt expansion (same as ComfyUI `prompt_enhance`) |
-| `cameraMotion` | `auto` / `none` / `dolly_in` / `dolly_out` / `dolly_left` / `dolly_right` / `jib_up` / `jib_down` / `static` |
+| `cameraMotion` | `auto` / `none` / `dolly_in` / `dolly_out` / `dolly_left` / `dolly_right` / `jib_up` / `jib_down` / `static` (prompt-only; no 19B camera LoRA) |
 | `referenceVideo` | Base64 / data URL; required for IC-LoRA. Size/length still follow the request (reference is resized). |
-| `icLora` | `auto` / `none` / `union` / `detailer` |
+| `icLora` | `auto` / `none` / `union` |
 | `controlType` | `auto` / `depth` / `canny` / `pose` |
-| `detailer` | Also load the Detailer IC-LoRA when a reference video is present |
-| `loraStrength`, `icLoraStrength` | Adapter strengths (defaults 1.0) |
+| `icLoraStrength` | Union / LipDub / Motion Track strength (default 1.0) |
 | `negativePrompt`, `seed` | Standard overrides |
 | `plan` | Explicit plan object (bypasses preset merge) |
 
@@ -190,9 +187,7 @@ Refine requires the **ltx-2.5-studio** bundle (spatial upscaler). Fast is single
 | `ltx-2.5-distilled` | UNet, Gemma4 TE, video VAE, audio VAE |
 | `ltx-2.5-studio` | Above + **spatial upscaler** (required for refine) + optional duration head, temporal upscaler, distilled LoRA |
 | `ltx-2.5-prompt-enhancer` | `gemma4_e2b_it_int8_convrot.safetensors` for ComfyUI `prompt_enhance` |
-| `ltx-camera-loras` | Official LTX-2 camera LoRAs (dolly / jib / static). One at a time. |
-| `ltx-iclora-union` | Union Control IC-LoRA (depth / canny / pose from a reference video) |
-| `ltx-iclora-detailer` | Detailer IC-LoRA (video-to-video) |
+| `ltx-iclora-union` | LTX-2.3 Union Control IC-LoRA (depth / canny / pose from a reference video) |
 | `ltx-iclora-lipdub` | LipDub IC-LoRA (image/keyframe + uploaded-audio lip sync) |
 | `ltx-iclora-motion-track` | Motion Track IC-LoRA (motion transfer from a reference video) |
 

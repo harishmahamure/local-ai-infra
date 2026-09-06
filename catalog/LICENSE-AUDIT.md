@@ -38,6 +38,8 @@ All entries in `models.yaml` are Apache-2.0 or MIT and `commercial: true`, excep
 | Bundle | Family | License |
 |--------|--------|---------|
 | `qwen-image-2512-fp8` | Qwen-Image 2512 | Apache-2.0 |
+| `qwen-image-edit-2511-fp8` | Qwen-Image-Edit 2511 | Apache-2.0 |
+| `qwen-image-layered` | Qwen-Image-Layered RGBA decompose | Apache-2.0 |
 | `chroma1-hd` | Chroma1-HD 8.9B (painterly mode) | Apache-2.0 |
 | `upscalers-esrgan` | RealESRGAN x2/x4 | MIT (via uwg/upscaler) |
 
@@ -65,9 +67,7 @@ All entries in `models.yaml` are Apache-2.0 or MIT and `commercial: true`, excep
 | `ltx-2.5-distilled` | LTX-2.5 22B distilled int8 + Gemma4 TE + AV VAEs | LTX-2-Community | Standard/fast LTX generation |
 | `ltx-2.5-studio` | Distilled + spatial upscaler + duration head (optional extras) | LTX-2-Community | Quality refine, ComfyUI LTX Studio workflow |
 | `ltx-2.5-prompt-enhancer` | Gemma4 E2B int8 (ComfyUI TextGenerateLTX2Prompt) | Gemma Terms | Optional prompt_enhance in ComfyUI workflows |
-| `ltx-camera-loras` | LTX-2 19B camera-control LoRAs (dolly / jib / static) | LTX-2-Community | Prompt or `cameraMotion` selection; do not stack |
 | `ltx-iclora-union` | LTX-2.3 22B Union Control IC-LoRA | LTX-2-Community | Depth / canny / pose from a reference video |
-| `ltx-iclora-detailer` | LTX-2 19B Detailer IC-LoRA | LTX-2-Community | Video-to-video detail pass (reference video) |
 | `ltx-iclora-lipdub` | LTX-2.3 22B LipDub IC-LoRA | LTX-2-Community | Image/keyframe + uploaded-audio lip sync |
 | `ltx-iclora-motion-track` | LTX-2.3 22B Motion Track IC-LoRA | LTX-2-Community | Motion transfer from a reference video |
 

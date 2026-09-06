@@ -2,8 +2,6 @@
 # LTX-2 / LTX-2.3 weights require a compatibility test before /v1 auto-use.
 
 groups:
-  camera_control:
-    max_active: 1
   qwen_speed:
     max_active: 1
 
@@ -96,104 +94,6 @@ loras:
     commercial_use: true
     compatibility_status: validated
 
-  - id: ltx-camera-dolly-in
-    family: ltx-2
-    role: camera_control
-    file: ltx-2-19b-lora-camera-control-dolly-in.safetensors
-    bundle: ltx-camera-loras
-    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
-    recommended_strength: 0.8
-    allowed_strength_range: [0.0, 1.2]
-    exclusive_group: camera_control
-    license: LTX-2-Community
-    commercial_use: true
-    compatibility_status: untested
-    compatibility_test_required: true
-
-  - id: ltx-camera-dolly-out
-    family: ltx-2
-    role: camera_control
-    file: ltx-2-19b-lora-camera-control-dolly-out.safetensors
-    bundle: ltx-camera-loras
-    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
-    recommended_strength: 0.8
-    allowed_strength_range: [0.0, 1.2]
-    exclusive_group: camera_control
-    license: LTX-2-Community
-    commercial_use: true
-    compatibility_status: untested
-    compatibility_test_required: true
-
-  - id: ltx-camera-dolly-left
-    family: ltx-2
-    role: camera_control
-    file: ltx-2-19b-lora-camera-control-dolly-left.safetensors
-    bundle: ltx-camera-loras
-    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
-    recommended_strength: 0.8
-    allowed_strength_range: [0.0, 1.2]
-    exclusive_group: camera_control
-    license: LTX-2-Community
-    commercial_use: true
-    compatibility_status: untested
-    compatibility_test_required: true
-
-  - id: ltx-camera-dolly-right
-    family: ltx-2
-    role: camera_control
-    file: ltx-2-19b-lora-camera-control-dolly-right.safetensors
-    bundle: ltx-camera-loras
-    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
-    recommended_strength: 0.8
-    allowed_strength_range: [0.0, 1.2]
-    exclusive_group: camera_control
-    license: LTX-2-Community
-    commercial_use: true
-    compatibility_status: untested
-    compatibility_test_required: true
-
-  - id: ltx-camera-jib-up
-    family: ltx-2
-    role: camera_control
-    file: ltx-2-19b-lora-camera-control-jib-up.safetensors
-    bundle: ltx-camera-loras
-    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
-    recommended_strength: 0.8
-    allowed_strength_range: [0.0, 1.2]
-    exclusive_group: camera_control
-    license: LTX-2-Community
-    commercial_use: true
-    compatibility_status: untested
-    compatibility_test_required: true
-
-  - id: ltx-camera-jib-down
-    family: ltx-2
-    role: camera_control
-    file: ltx-2-19b-lora-camera-control-jib-down.safetensors
-    bundle: ltx-camera-loras
-    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
-    recommended_strength: 0.8
-    allowed_strength_range: [0.0, 1.2]
-    exclusive_group: camera_control
-    license: LTX-2-Community
-    commercial_use: true
-    compatibility_status: untested
-    compatibility_test_required: true
-
-  - id: ltx-camera-static
-    family: ltx-2
-    role: camera_control
-    file: ltx-2-19b-lora-camera-control-static.safetensors
-    bundle: ltx-camera-loras
-    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
-    recommended_strength: 0.8
-    allowed_strength_range: [0.0, 1.2]
-    exclusive_group: camera_control
-    license: LTX-2-Community
-    commercial_use: true
-    compatibility_status: untested
-    compatibility_test_required: true
-
   - id: ltx-iclora-union
     family: ltx-2.3
     role: control
@@ -201,19 +101,6 @@ loras:
     bundle: ltx-iclora-union
     compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
     recommended_strength: 0.5
-    allowed_strength_range: [0.0, 1.0]
-    license: LTX-2-Community
-    commercial_use: true
-    compatibility_status: untested
-    compatibility_test_required: true
-
-  - id: ltx-iclora-detailer
-    family: ltx-2
-    role: detailer
-    file: ltx-2-19b-ic-lora-detailer.safetensors
-    bundle: ltx-iclora-detailer
-    compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
-    recommended_strength: 0.6
     allowed_strength_range: [0.0, 1.0]
     license: LTX-2-Community
     commercial_use: true

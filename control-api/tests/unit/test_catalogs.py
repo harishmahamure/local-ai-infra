@@ -14,8 +14,10 @@ def test_catalogs_load() -> None:
     assert "master" in catalog.presets
     assert "qwen-txt2img" in catalog.workflows
     assert "image.generate" in catalog.operations
-    assert catalog.loras["ltx-camera-dolly-in"].compatibility_test_required is True
-    assert catalog.groups["camera_control"].max_active == 1
+    assert catalog.loras["ltx-iclora-union"].compatibility_test_required is True
+    assert catalog.groups["qwen_speed"].max_active == 1
+    assert "ltx-camera-loras" not in catalog.models
+    assert "ltx-iclora-detailer" not in catalog.models
     assert "ltx-iclora-lipdub" in catalog.models
     assert "ltx-iclora-motion-track" in catalog.models
     assert "ltx-iclora-lipdub" in catalog.loras
@@ -24,6 +26,13 @@ def test_catalogs_load() -> None:
     assert catalog.operations["video.motion_transfer"].implemented is True
     assert catalog.operations["video.audio_to_video"].implemented is True
     assert catalog.operations["video.first_last_frames"].implemented is True
+    assert "qwen-image-layered" in catalog.models
+    assert "qwen-edit" in catalog.workflows
+    assert "qwen-control" in catalog.workflows
+    assert "qwen-layered" in catalog.workflows
+    assert catalog.operations["image.edit"].implemented is True
+    assert catalog.operations["image.controlled"].implemented is True
+    assert catalog.operations["image.layered"].implemented is True
 
 
 def test_text_model_catalog() -> None:

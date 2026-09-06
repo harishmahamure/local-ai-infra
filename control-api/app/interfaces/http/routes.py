@@ -12,7 +12,7 @@ from ...domain.errors import DomainError
 from .errors import domain_error_response
 from .schemas import RetryJobRequest, SubmitJobRequest, TextChatRequest
 
-router = APIRouter()
+router = APIRouter(tags=["Engine (/v1)"])
 
 
 def _svc(request: Request) -> EngineServices:
@@ -23,7 +23,13 @@ def _ok(payload: dict[str, Any], status: int = 200) -> JSONResponse:
     return JSONResponse(status_code=status, content=payload)
 
 
-@router.post("/v1/jobs", status_code=202)
+@router.post(
+    "/v1/jobs",
+    status_code=202,
+    summary="Submit a catalog job",
+    description="Queue an implemented operation (image.generate, video.generate, text.chat, …). "
+    "Pass Idempotency-Key to replay the same accept response. Inputs use asset_id, not filesystem paths.",
+)
 def submit_job(
     body: SubmitJobRequest,
     request: Request,
@@ -36,7 +42,7 @@ def submit_job(
         return domain_error_response(exc, request)
 
 
-@router.get("/v1/jobs/{job_id}")
+@router.get("/v1/jobs/{job_id}", summary="Get job status", description="Public job record: status, phase, progress, artifacts, error.")
 def get_job(job_id: str, request: Request):
     try:
         return _ok(_svc(request).get_job(job_id).to_public_dict())
@@ -44,7 +50,11 @@ def get_job(job_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.get("/v1/jobs/{job_id}/events")
+@router.get(
+    "/v1/jobs/{job_id}/events",
+    summary="Job event stream (SSE)",
+    description="Server-sent events for job.progress, job.completed, job.failed, job.cancelled. Keepalive comments every 15s.",
+)
 def job_events(job_id: str, request: Request):
     services = _svc(request)
     try:
@@ -77,7 +87,7 @@ def job_events(job_id: str, request: Request):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
-@router.post("/v1/jobs/{job_id}/cancel")
+@router.post("/v1/jobs/{job_id}/cancel", summary="Cancel a job")
 def cancel_job(job_id: str, request: Request):
     try:
         return _ok(_svc(request).cancel_job(job_id).to_public_dict())
@@ -85,7 +95,11 @@ def cancel_job(job_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.post("/v1/jobs/{job_id}/retry")
+@router.post(
+    "/v1/jobs/{job_id}/retry",
+    summary="Retry a job",
+    description="strategy: same | new_seed | override | rerun_stage. override may send new parameters; rerun_stage needs stage.",
+)
 def retry_job(job_id: str, body: RetryJobRequest, request: Request):
     try:
         job = _svc(request).retry_job(job_id, body.strategy, body.parameters, body.stage)
@@ -94,27 +108,27 @@ def retry_job(job_id: str, body: RetryJobRequest, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.get("/v1/operations")
+@router.get("/v1/operations", summary="List operations", description="Catalog operations with available flags and input schemas.")
 def list_operations(request: Request):
     return _ok(_svc(request).list_operations())
 
 
-@router.get("/v1/capabilities")
+@router.get("/v1/capabilities", summary="Engine capabilities")
 def list_capabilities(request: Request):
     return _ok(_svc(request).list_capabilities())
 
 
-@router.get("/v1/presets")
+@router.get("/v1/presets", summary="List presets")
 def list_presets(request: Request):
     return _ok(_svc(request).list_presets())
 
 
-@router.get("/v1/models")
+@router.get("/v1/models", summary="List catalog models")
 def list_models(request: Request):
     return _ok(_svc(request).list_models())
 
 
-@router.get("/v1/models/{model_id}")
+@router.get("/v1/models/{model_id}", summary="Get one catalog model")
 def get_model(model_id: str, request: Request):
     try:
         return _ok(_svc(request).get_model(model_id))
@@ -122,7 +136,7 @@ def get_model(model_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.post("/v1/models/{model_id}/download", status_code=202)
+@router.post("/v1/models/{model_id}/download", status_code=202, summary="Start model download")
 def download_model(model_id: str, request: Request):
     try:
         return _ok(_svc(request).download_model(model_id), 202)
@@ -130,7 +144,7 @@ def download_model(model_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.post("/v1/models/{model_id}/verify")
+@router.post("/v1/models/{model_id}/verify", summary="Verify model files on disk")
 def verify_model(model_id: str, request: Request):
     try:
         return _ok(_svc(request).verify_model(model_id))
@@ -138,7 +152,7 @@ def verify_model(model_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.post("/v1/models/{model_id}/load")
+@router.post("/v1/models/{model_id}/load", summary="Load model onto the GPU")
 def load_model(model_id: str, request: Request):
     try:
         return _ok(_svc(request).load_model(model_id))
@@ -146,7 +160,7 @@ def load_model(model_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.post("/v1/models/{model_id}/unload")
+@router.post("/v1/models/{model_id}/unload", summary="Unload model from the GPU")
 def unload_model(model_id: str, request: Request):
     try:
         return _ok(_svc(request).unload_model(model_id))
@@ -154,7 +168,7 @@ def unload_model(model_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.post("/v1/models/{model_id}/start")
+@router.post("/v1/models/{model_id}/start", summary="Start model (alias of load)")
 def start_model(model_id: str, request: Request):
     try:
         return _ok(_svc(request).start_model(model_id))
@@ -162,7 +176,7 @@ def start_model(model_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.post("/v1/models/{model_id}/stop")
+@router.post("/v1/models/{model_id}/stop", summary="Stop model (alias of unload)")
 def stop_model(model_id: str, request: Request):
     try:
         return _ok(_svc(request).stop_model(model_id))
@@ -170,12 +184,16 @@ def stop_model(model_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.get("/v1/text/models")
+@router.get("/v1/text/models", summary="List text/vision chat models")
 def list_text_models(request: Request):
     return _ok(_svc(request).list_text_models())
 
 
-@router.post("/v1/text/chat")
+@router.post(
+    "/v1/text/chat",
+    summary="Text + vision chat",
+    description="Synchronous JSON or SSE when stream=true. Starts llama-fast or gemma as needed. Not a Comfy job.",
+)
 def text_chat(body: TextChatRequest, request: Request):
     try:
         payload = body.model_dump()
@@ -186,17 +204,17 @@ def text_chat(body: TextChatRequest, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.get("/v1/loras")
+@router.get("/v1/loras", summary="List LoRAs")
 def list_loras(request: Request):
     return _ok(_svc(request).list_loras())
 
 
-@router.get("/v1/workflows")
+@router.get("/v1/workflows", summary="List workflows")
 def list_workflows(request: Request):
     return _ok(_svc(request).list_workflows())
 
 
-@router.get("/v1/workflows/{workflow_id}")
+@router.get("/v1/workflows/{workflow_id}", summary="Get one workflow")
 def get_workflow(workflow_id: str, request: Request):
     try:
         return _ok(_svc(request).get_workflow(workflow_id))
@@ -204,7 +222,7 @@ def get_workflow(workflow_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.post("/v1/workflows/{workflow_id}/validate")
+@router.post("/v1/workflows/{workflow_id}/validate", summary="Validate a workflow binding")
 def validate_workflow(workflow_id: str, request: Request):
     try:
         return _ok(_svc(request).validate_workflow(workflow_id))
@@ -212,7 +230,7 @@ def validate_workflow(workflow_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.post("/v1/assets")
+@router.post("/v1/assets", summary="Upload an asset", description="Multipart file upload. Returns asset_id for job inputs.")
 async def upload_asset(request: Request, file: UploadFile = File(...)):
     raw = await file.read()
     try:
@@ -222,7 +240,7 @@ async def upload_asset(request: Request, file: UploadFile = File(...)):
         return domain_error_response(exc, request)
 
 
-@router.get("/v1/assets/{asset_id}")
+@router.get("/v1/assets/{asset_id}", summary="Get asset metadata")
 def get_asset(asset_id: str, request: Request):
     try:
         return _ok(_svc(request).get_asset(asset_id).to_public_dict())
@@ -230,7 +248,7 @@ def get_asset(asset_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.delete("/v1/assets/{asset_id}")
+@router.delete("/v1/assets/{asset_id}", summary="Delete an asset")
 def delete_asset(asset_id: str, request: Request):
     try:
         _svc(request).delete_asset(asset_id)
@@ -239,12 +257,12 @@ def delete_asset(asset_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.get("/v1/runtime")
+@router.get("/v1/runtime", summary="Engine runtime snapshot")
 def runtime(request: Request):
     return _ok(_svc(request).runtime())
 
 
-@router.get("/ready")
+@router.get("/ready", summary="Readiness probe", tags=["Health"], description="200 if the engine can accept work; 503 otherwise.")
 def ready(request: Request):
     ok, details = _svc(request).ready()
     return JSONResponse(status_code=200 if ok else 503, content={"ready": ok, **details})

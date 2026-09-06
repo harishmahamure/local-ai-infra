@@ -18,7 +18,15 @@ M = {
     "upscale_x2": "RealESRGAN_x2plus.pth",
     "qwen_controlnet_union": "Qwen-Image-2512-Fun-Controlnet-Union-2602.safetensors",
     "qwen_inpaint_patch": "qwen_image_inpaint_diffsynth_controlnet.safetensors",
+    "qwen_layered_unet": "qwen_image_layered_fp8mixed.safetensors",
+    "qwen_layered_vae": "qwen_image_layered_vae.safetensors",
 }
+
+LAYERED_REQUIRED_NODES = (
+    "EmptyQwenImageLayeredLatentImage",
+    "LatentCut",
+    "LatentCutToBatch",
+)
 
 
 class GraphBuilder:
@@ -210,14 +218,25 @@ def build_painterly(plan: dict[str, Any]) -> dict[str, Any]:
     return gb.build()
 
 
+def _edit_image_names(plan: dict[str, Any]) -> list[str]:
+    names = [str(n) for n in (plan.get("image_names") or []) if n]
+    if not names and plan.get("image_name"):
+        names = [str(plan["image_name"])]
+    if not names:
+        names = ["input.png"]
+    if len(names) > 3:
+        raise ValueError("edit mode accepts at most 3 reference images")
+    return names
+
+
 def build_edit(plan: dict[str, Any]) -> dict[str, Any]:
     gb = GraphBuilder()
     steps = int(plan.get("steps", 20))
     cfg = float(plan.get("cfg", 4.0))
     seed = int(plan.get("seed", 42))
-    image_name = plan.get("image_name") or "input.png"
+    image_names = _edit_image_names(plan)
+    loads = [gb.add("LoadImage", {"image": name}) for name in image_names]
 
-    load = gb.add("LoadImage", {"image": image_name})
     unet = gb.add("UNETLoader", {"unet_name": M["qwen_edit_unet"], "weight_dtype": "default"})
     clip = gb.add(
         "CLIPLoader",
@@ -225,20 +244,31 @@ def build_edit(plan: dict[str, Any]) -> dict[str, Any]:
     )
     vae = gb.add("VAELoader", {"vae_name": M["qwen_vae"]})
 
-    pos = gb.add(
-        "TextEncodeQwenImageEdit",
-        {
+    if len(loads) == 1:
+        pos = gb.add(
+            "TextEncodeQwenImageEdit",
+            {
+                "clip": gb.ref(clip),
+                "vae": gb.ref(vae),
+                "image": gb.ref(loads[0]),
+                "prompt": plan["prompt"],
+            },
+        )
+    else:
+        encode_inputs: dict[str, Any] = {
             "clip": gb.ref(clip),
             "vae": gb.ref(vae),
-            "image": gb.ref(load),
+            "image": gb.ref(loads[0]),
             "prompt": plan["prompt"],
-        },
-    )
+        }
+        for idx, load_id in enumerate(loads[1:], start=2):
+            encode_inputs[f"image{idx}"] = gb.ref(load_id)
+        pos = gb.add("TextEncodeQwenImageEditPlus", encode_inputs)
     neg = gb.add(
         "CLIPTextEncode",
         {"clip": gb.ref(clip), "text": plan.get("negative_prompt", "blurry, low quality, watermark")},
     )
-    vae_enc = gb.add("VAEEncode", {"pixels": gb.ref(load), "vae": gb.ref(vae)})
+    vae_enc = gb.add("VAEEncode", {"pixels": gb.ref(loads[0]), "vae": gb.ref(vae)})
 
     sampler = gb.add(
         "KSampler",
@@ -433,6 +463,72 @@ def build_bg_replace(plan: dict[str, Any]) -> dict[str, Any]:
     return gb.build()
 
 
+def build_layered(plan: dict[str, Any]) -> dict[str, Any]:
+    gb = GraphBuilder()
+    steps = int(plan.get("steps", 50))
+    cfg = float(plan.get("cfg", 4.0))
+    seed = int(plan.get("seed", 42))
+    layers = max(1, min(8, int(plan.get("layers", 3))))
+    width = int(plan.get("width", 640))
+    height = int(plan.get("height", 640))
+    image_name = plan.get("image_name") or "input.png"
+    prompt = str(plan.get("prompt") or "Decompose this image into clean RGBA layers.")
+
+    load = gb.add("LoadImage", {"image": image_name})
+    scaled = gb.add(
+        "ImageScale",
+        {
+            "image": gb.ref(load),
+            "upscale_method": "lanczos",
+            "width": width,
+            "height": height,
+            "crop": "center",
+        },
+    )
+    unet = gb.add("UNETLoader", {"unet_name": M["qwen_layered_unet"], "weight_dtype": "default"})
+    clip = gb.add(
+        "CLIPLoader",
+        {"clip_name": M["qwen_clip"], "type": "qwen_image", "weight_dtype": "default"},
+    )
+    vae = gb.add("VAELoader", {"vae_name": M["qwen_layered_vae"]})
+    pos = gb.add(
+        "TextEncodeQwenImageEdit",
+        {
+            "clip": gb.ref(clip),
+            "vae": gb.ref(vae),
+            "image": gb.ref(scaled),
+            "prompt": prompt,
+        },
+    )
+    neg = gb.add("CLIPTextEncode", {"clip": gb.ref(clip), "text": plan.get("negative_prompt", "")})
+    latent = gb.add(
+        "EmptyQwenImageLayeredLatentImage",
+        {"width": width, "height": height, "layers": layers, "batch_size": 1},
+    )
+    sampler = gb.add(
+        "KSampler",
+        {
+            "model": gb.ref(unet),
+            "positive": gb.ref(pos),
+            "negative": gb.ref(neg),
+            "latent_image": gb.ref(latent),
+            "seed": seed,
+            "control_after_generate": "fixed",
+            "steps": steps,
+            "cfg": cfg,
+            "sampler_name": "euler",
+            "scheduler": "simple",
+            "denoise": 1.0,
+        },
+    )
+    cut = gb.add("LatentCut", {"samples": gb.ref(sampler), "dim": "t", "index": 1})
+    batch = gb.add("LatentCutToBatch", {"samples": gb.ref(cut), "dim": "t"})
+    decode = gb.add("VAEDecode", {"samples": gb.ref(batch), "vae": gb.ref(vae)})
+    prefix = plan.get("filename_prefix") or "ComfyUI"
+    gb.add("SaveImage", {"images": gb.ref(decode), "filename_prefix": prefix})
+    return gb.build()
+
+
 def build_upscale(plan: dict[str, Any]) -> dict[str, Any]:
     gb = GraphBuilder()
     image_name = plan.get("image_name") or "input.png"
@@ -449,9 +545,13 @@ def build(plan: dict[str, Any]) -> dict[str, Any]:
     if mode == "painterly":
         return build_painterly(plan)
     if mode == "edit":
-        if not plan.get("image_name"):
+        if not plan.get("image_name") and not plan.get("image_names"):
             raise ValueError("image is required for edit mode")
         return build_edit(plan)
+    if mode == "layered":
+        if not plan.get("image_name"):
+            raise ValueError("image is required for layered mode")
+        return build_layered(plan)
     if mode == "control":
         if not plan.get("image_name"):
             raise ValueError("image is required for control mode")

@@ -21,10 +21,9 @@ Working inference paths:
 - GPU profile switching in `runtime.py`
 - Legacy ops UI in `control-api/static/`
 
-Catalog today (22 commercial-gated bundles): Qwen 2512/Edit, Lightning/Turbo and
+Catalog today (21 commercial-gated bundles): Qwen 2512/Edit, Lightning/Turbo and
 style LoRAs, Chroma1-HD, Fun Union + DiffSynth controls, RealESRGAN, LTX 2.5
-distilled/studio/prompt-enhancer, LTX-2 camera LoRAs, LTX-2.3 IC-LoRAs, Gemma 4
-E4B, Qwen3.8-27B.
+distilled/studio/prompt-enhancer, LTX-2.3 IC-LoRAs, Gemma 4 E4B, Qwen3.6-35B.
 
 Not in catalog / not wired: SAM 2.1, Depth Anything V2 (node-side only), DINOv2,
 official LTX 2.5 DFR, SeedVR2, FlashVSR, LatentSync, Chatterbox, ACE-Step,
@@ -53,7 +52,7 @@ Stable Audio Open, RIFE.
 
 - LLM planner on `/api/v1/generate`
 - Character-master select/promote
-- Prompt-inferred camera LoRAs on `/api/v1/ltx-video`
+- Prompt-inferred camera language on `/api/v1/ltx-video`
 - Static Control UI
 
 ## Tight coupling that `/v1` must not leak
@@ -65,7 +64,7 @@ Stable Audio Open, RIFE.
 | Hardcoded checkpoint filenames | Catalog files; graphs stay adapters |
 | Node class names in app code | Stay inside ComfyUI adapter |
 | Planner on every generate | INPUT PROMPT → EXECUTE PROMPT |
-| Auto camera LoRAs from prompt | Caller or preset must opt in |
+| Auto camera language from prompt | Caller or preset must opt in |
 | Four JSON job stores | One `JobRepository` |
 | Character select/promote | Future app chooses artifacts |
 
@@ -80,5 +79,6 @@ Stable Audio Open, RIFE.
 SAM, depth-as-operation, DINO QC, DFR, SeedVR2, FlashVSR, RIFE, LatentSync,
 Chatterbox, ACE-Step, Stable Audio Open, FFmpeg mix/concat/finalize.
 
-LTX-2 camera LoRAs and LTX-2.3 IC-LoRAs are `compatibility_test_required: true`
-and must not be auto-selected for LTX 2.5 MASTER.
+LTX-2.3 IC-LoRAs are `compatibility_test_required: true` and must not be
+auto-selected for LTX 2.5 MASTER. LTX-2 19B camera/detailer adapters are not
+in the catalog.

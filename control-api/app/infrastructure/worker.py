@@ -194,6 +194,16 @@ class JobWorker:
     def _load_inputs(self, job: Job) -> dict[str, bytes]:
         files: dict[str, bytes] = {}
         for key, value in job.inputs.items():
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    asset_id = _asset_ref(item)
+                    if not asset_id:
+                        continue
+                    artifact = self.artifacts.get(asset_id)
+                    if artifact is None or artifact.deleted:
+                        raise DomainError(ErrorCode.ASSET_NOT_FOUND, f"Asset {asset_id} not found")
+                    files[f"{key}_{index}"] = self.storage.read(asset_id)
+                continue
             asset_id = _asset_ref(value)
             if not asset_id:
                 continue

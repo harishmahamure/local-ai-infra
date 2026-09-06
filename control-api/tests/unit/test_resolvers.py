@@ -51,10 +51,10 @@ def test_invalid_override(catalog) -> None:
     assert exc.value.code == ErrorCode.INVALID_PARAMETER
 
 
-def test_untested_camera_lora_rejected(catalog) -> None:
+def test_untested_ltx_iclora_rejected(catalog) -> None:
     preset = catalog.presets["master"]
     with pytest.raises(DomainError) as exc:
-        resolve_loras(catalog, preset, {"loras": ["ltx-camera-dolly-in"]}, ["ltx-2.5-distilled"])
+        resolve_loras(catalog, preset, {"loras": ["ltx-iclora-union"]}, ["ltx-2.5-distilled"])
     assert exc.value.code == ErrorCode.LORA_INCOMPATIBLE
 
 
@@ -65,16 +65,14 @@ def test_workflow_bindings_are_logical(catalog) -> None:
     assert wf.bindings["prompt"]["key"] == "prompt"
 
 
-def test_exclusive_camera_group(catalog) -> None:
-    catalog.loras["ltx-camera-dolly-in"].compatibility_test_required = False
-    catalog.loras["ltx-camera-dolly-out"].compatibility_test_required = False
-    preset = catalog.presets["master"]
+def test_exclusive_qwen_speed_group(catalog) -> None:
+    preset = catalog.presets["draft"]
     with pytest.raises(DomainError) as exc:
         resolve_loras(
             catalog,
             preset,
-            {"loras": ["ltx-camera-dolly-in", "ltx-camera-dolly-out"]},
-            ["ltx-2.5-distilled"],
+            {"loras": ["qwen-lightning", "qwen-turbo"]},
+            ["qwen-image-2512-fp8"],
         )
     assert exc.value.code == ErrorCode.LORA_INCOMPATIBLE
 

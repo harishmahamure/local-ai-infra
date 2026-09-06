@@ -6,10 +6,13 @@ from pydantic import BaseModel, Field
 
 
 class SubmitJobRequest(BaseModel):
-    operation: str
-    preset: str = "master"
-    inputs: dict[str, Any] = Field(default_factory=dict)
-    parameters: dict[str, Any] = Field(default_factory=dict)
+    operation: str = Field(..., description="Catalog operation id, e.g. image.generate, video.generate, video.lipsync")
+    preset: str = Field("master", description="draft | balanced | master | character_master | …")
+    inputs: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Operation inputs. Use {asset_id} objects for files, not filesystem paths.",
+    )
+    parameters: dict[str, Any] = Field(default_factory=dict, description="seed, steps, cfg, loras, duration_seconds, …")
     client_context: dict[str, Any] = Field(default_factory=dict)
     output: dict[str, Any] | None = None
 
@@ -33,8 +36,8 @@ class TextChatMessage(BaseModel):
 
 
 class TextChatRequest(BaseModel):
-    model: str
+    model: str = Field(..., description="gemma-4-e4b or qwen36-35b-a3b-rq")
     messages: list[TextChatMessage]
     temperature: float | None = None
     max_tokens: int | None = None
-    stream: bool = False
+    stream: bool = Field(False, description="If true, response is text/event-stream")

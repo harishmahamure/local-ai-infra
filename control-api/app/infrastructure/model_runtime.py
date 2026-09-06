@@ -15,9 +15,7 @@ LTX_MODELS = {
     "ltx-2.5-distilled",
     "ltx-2.5-studio",
     "ltx-2.5-prompt-enhancer",
-    "ltx-camera-loras",
     "ltx-iclora-union",
-    "ltx-iclora-detailer",
     "ltx-iclora-lipdub",
     "ltx-iclora-motion-track",
 }

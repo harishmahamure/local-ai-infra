@@ -22,23 +22,19 @@ GENERATE_JOBS_ROOT = Path(config.LOGS) / "jobs"
 LTX_BUNDLE = "ltx-2.5-distilled"
 LTX_STUDIO_BUNDLE = "ltx-2.5-studio"
 LTX_PROMPT_ENHANCER_BUNDLE = "ltx-2.5-prompt-enhancer"
-LTX_CAMERA_LORA_BUNDLE = ltx_loras.CAMERA_BUNDLE
 LTX_IC_UNION_BUNDLE = ltx_loras.IC_UNION_BUNDLE
-LTX_IC_DETAILER_BUNDLE = ltx_loras.IC_DETAILER_BUNDLE
 LTX_IC_LIPDUB_BUNDLE = ltx_loras.IC_LIPDUB_BUNDLE
 LTX_IC_MOTION_BUNDLE = ltx_loras.IC_MOTION_BUNDLE
 LTX_BUNDLES = [
     LTX_BUNDLE,
     LTX_STUDIO_BUNDLE,
     LTX_PROMPT_ENHANCER_BUNDLE,
-    LTX_CAMERA_LORA_BUNDLE,
     LTX_IC_UNION_BUNDLE,
-    LTX_IC_DETAILER_BUNDLE,
     LTX_IC_LIPDUB_BUNDLE,
     LTX_IC_MOTION_BUNDLE,
 ]
 LTX_MODES = ("t2v", "i2v", "a2v", "flf2v", "lipsync", "motion_transfer")
-MAX_DURATION_SECONDS = 10
+MAX_DURATION_SECONDS = ltx_graph.MAX_DURATION_SECONDS
 _PROGRESS_ENDPOINT = "GET /api/v1/ltx-video/{jobId}"
 
 _LTX_OVERRIDE_KEYS = (
@@ -70,7 +66,6 @@ _LTX_OVERRIDE_KEYS = (
     "camera_motion",
     "ic_lora",
     "control_type",
-    "detailer",
     "lora_strength",
     "ic_lora_strength",
 )
@@ -281,8 +276,6 @@ def _build_plan(job: dict[str, Any]) -> dict[str, Any]:
         overrides["ic_lora"] = job["icLora"]
     if job.get("controlType") is not None:
         overrides["control_type"] = job["controlType"]
-    if job.get("detailer") is not None:
-        overrides["detailer"] = job["detailer"]
     if job.get("loraStrength") is not None:
         overrides["lora_strength"] = job["loraStrength"]
     if job.get("icLoraStrength") is not None:
@@ -309,12 +302,16 @@ def _apply_lora_decision(plan: dict[str, Any], job: dict[str, Any]) -> dict[str,
         camera_motion=job.get("cameraMotion") or out.get("camera_motion") or "auto",
         ic_lora=job.get("icLora") or out.get("ic_lora") or "auto",
         control_type=job.get("controlType") or out.get("control_type") or "auto",
-        detailer=bool(job.get("detailer") if job.get("detailer") is not None else out.get("detailer")),
         has_reference_video=bool(job.get("videoField") or out.get("video_name")),
         lora_strength=float(job.get("loraStrength") or out.get("lora_strength") or 1.0),
         ic_lora_strength=float(job.get("icLoraStrength") or out.get("ic_lora_strength") or 1.0),
     )
     out.update(decision)
+    hint = decision.get("prompt_hint")
+    if hint:
+        existing = (out.get("prompt") or "").rstrip()
+        if hint.lower() not in existing.lower():
+            out["prompt"] = f"{existing}, {hint}" if existing else hint
     mode = str(job.get("mode") or out.get("mode") or "t2v")
     if mode == "lipsync":
         out["ic_loras"] = [ltx_loras.explicit_ic_lora("lipdub", float(job.get("icLoraStrength") or 1.0))]
@@ -337,11 +334,10 @@ def _drop_uninstalled_auto_loras(plan: dict[str, Any]) -> dict[str, Any]:
     kept_loras = []
     for lora in plan.get("loras") or []:
         path = models_root / "loras" / str(lora.get("name") or "")
-        if path.is_file() or plan.get("camera_motion_source") == "override":
+        if path.is_file():
             kept_loras.append(lora)
             continue
-        plan["camera_skip"] = f"weights missing: {lora.get('name')}"
-        plan["camera_motion"] = None
+        plan["lora_skip"] = f"weights missing: {lora.get('name')}"
     plan["loras"] = kept_loras
 
     kept_ic = []
@@ -358,16 +354,12 @@ def _drop_uninstalled_auto_loras(plan: dict[str, Any]) -> dict[str, Any]:
         plan["control_type"] = None
 
     bundles: list[str] = []
-    if kept_loras:
-        bundles.append(ltx_loras.CAMERA_BUNDLE)
     for lora in kept_ic:
         name = str(lora.get("name") or "")
         if "lipdub" in name:
             bundles.append(ltx_loras.IC_LIPDUB_BUNDLE)
         elif "motion-track" in name:
             bundles.append(ltx_loras.IC_MOTION_BUNDLE)
-        elif "detailer" in name:
-            bundles.append(ltx_loras.IC_DETAILER_BUNDLE)
         else:
             bundles.append(ltx_loras.IC_UNION_BUNDLE)
     plan["lora_bundles"] = list(dict.fromkeys(bundles))
@@ -402,7 +394,7 @@ def _validate_loras(plan: dict[str, Any]) -> None:
         if not path.is_file():
             raise LtxVideoError(
                 "MODELS_MISSING",
-                f"Camera LoRA missing on disk: {name}. Run `./bin/ai download {ltx_loras.CAMERA_BUNDLE}`.",
+                f"LoRA missing on disk: {name}.",
                 409,
             )
     if not plan.get("ic_enabled"):
@@ -418,8 +410,6 @@ def _validate_loras(plan: dict[str, Any]) -> None:
                 bundle = ltx_loras.IC_LIPDUB_BUNDLE
             elif "motion-track" in name_s:
                 bundle = ltx_loras.IC_MOTION_BUNDLE
-            elif "detailer" in name_s:
-                bundle = ltx_loras.IC_DETAILER_BUNDLE
             else:
                 bundle = ltx_loras.IC_UNION_BUNDLE
             raise LtxVideoError(
@@ -716,7 +706,6 @@ def submit(
     reference_video: str | None = None,
     ic_lora: str | None = None,
     control_type: str | None = None,
-    detailer: bool | None = None,
     lora_strength: float | None = None,
     ic_lora_strength: float | None = None,
 ) -> dict[str, Any]:
@@ -784,7 +773,6 @@ def submit(
         "videoField": video_field,
         "icLora": ic_lora,
         "controlType": control_type,
-        "detailer": detailer,
         "loraStrength": lora_strength,
         "icLoraStrength": ic_lora_strength,
         "plan": None,
@@ -855,18 +843,6 @@ def get_capabilities() -> dict[str, Any]:
     refine_ready = refine_nodes and studio_ready
 
     models_root = _models_root()
-    camera_loras = []
-    for spec in ltx_loras.CAMERA_MOTIONS.values():
-        path = models_root / "loras" / spec["file"]
-        camera_loras.append(
-            {
-                "id": spec["id"],
-                "label": spec["label"],
-                "file": spec["file"],
-                "bundle": spec["bundle"],
-                "ready": path.is_file(),
-            }
-        )
     ic_loras = []
     for spec in ltx_loras.IC_LORAS.values():
         path = models_root / "loras" / spec["file"]
@@ -886,9 +862,7 @@ def get_capabilities() -> dict[str, Any]:
         if comfy_client.ltx_is_ready()
         else False
     )
-    camera_ready = all(item["ready"] for item in camera_loras)
     ic_union_ready = any(item["id"] == "union" and item["ready"] for item in ic_loras)
-    ic_detailer_ready = any(item["id"] == "detailer" and item["ready"] for item in ic_loras)
 
     note = "Text or image to video with synchronized audio. Pass prompt and audioPrompt verbatim."
     if not bundle_ready:
@@ -900,8 +874,6 @@ def get_capabilities() -> dict[str, Any]:
         note += " For quality/refine (LTX Studio workflow), run `./bin/ai download ltx-2.5-studio`."
     if not prompt_enhance_ready:
         note += " Optional prompt enhancer (ComfyUI prompt_enhance): `./bin/ai download ltx-2.5-prompt-enhancer`."
-    if not camera_ready:
-        note += " Camera LoRAs: `./bin/ai download ltx-camera-loras`."
     if not ic_union_ready:
         note += " Union IC-LoRA: `./bin/ai download ltx-iclora-union`."
     if not any(item["id"] == "lipdub" and item["ready"] for item in ic_loras):
@@ -918,11 +890,8 @@ def get_capabilities() -> dict[str, Any]:
         "promptEnhanceReady": prompt_enhance_ready,
         "nodesReady": nodes_ok,
         "refineReady": refine_ready,
-        "cameraLoras": camera_loras,
-        "cameraLorasReady": camera_ready,
         "icLoras": ic_loras,
         "icLoraReady": ic_union_ready and ic_nodes,
-        "detailerReady": ic_detailer_ready and ic_nodes,
         "icNodesReady": ic_nodes,
         "cameraMotions": ltx_loras.list_camera_motions(),
         "controlTypes": ltx_loras.list_control_types(),
@@ -953,7 +922,7 @@ def get_capabilities() -> dict[str, Any]:
             note
             + " Standard and Quality use 2-stage LTX Studio refine (sharp). Fast is single-pass preview only. "
             "Use detailed prompts, or set promptEnhance=true (requires ltx-2.5-prompt-enhancer). "
-            "cameraMotion=auto picks an official camera LoRA from the prompt. "
-            "IC-LoRA / Detailer need a referenceVideo. Distilled LoRA is not applied on the distilled transformer."
+            "cameraMotion appends camera language to the prompt (LTX-2 19B camera LoRAs are not used on 2.5). "
+            "LTX-2.3 IC-LoRAs need a referenceVideo. Distilled LoRA is not applied on the distilled transformer."
         ),
     }

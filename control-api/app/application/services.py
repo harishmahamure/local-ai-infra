@@ -206,7 +206,7 @@ class EngineServices:
     def list_capabilities(self) -> dict[str, Any]:
         disk = self.model_runtime.disk_status()
         caps: dict[str, Any] = {
-            "image": {"generate": False, "edit": False, "upscale": False, "control": []},
+            "image": {"generate": False, "edit": False, "upscale": False, "control": [], "layered": False},
             "video": {
                 "text_to_video": False,
                 "image_to_video": False,
@@ -228,6 +228,10 @@ class EngineServices:
                 caps["image"]["generate"] = True
             elif op.id == "image.edit":
                 caps["image"]["edit"] = True
+            elif op.id == "image.controlled":
+                caps["image"]["control"] = ["pose", "depth", "canny"]
+            elif op.id == "image.layered":
+                caps["image"]["layered"] = True
             elif op.id == "image.upscale":
                 caps["image"]["upscale"] = True
             elif op.id == "video.generate":
@@ -484,6 +488,30 @@ def _validate_inputs(operation: str, inputs: dict[str, Any], _max_upload: int) -
         raise DomainError(ErrorCode.INVALID_REQUEST, "Prompt exceeds maximum length")
     if operation == "image.generate" and not str(inputs.get("prompt") or "").strip():
         raise DomainError(ErrorCode.INVALID_REQUEST, "prompt is required")
+    if operation == "image.edit":
+        if not str(inputs.get("prompt") or "").strip():
+            raise DomainError(ErrorCode.INVALID_REQUEST, "prompt is required")
+        refs = inputs.get("reference_images")
+        has_refs = isinstance(refs, list) and any(isinstance(item, dict) and item.get("asset_id") for item in refs)
+        has_image = isinstance(inputs.get("image"), dict) and inputs["image"].get("asset_id")
+        if not has_refs and not has_image:
+            raise DomainError(ErrorCode.INVALID_REQUEST, "reference_images or image.asset_id is required")
+        if isinstance(refs, list) and len(refs) > 3:
+            raise DomainError(ErrorCode.INVALID_REQUEST, "image.edit accepts at most 3 reference images")
+    if operation == "image.controlled":
+        if not str(inputs.get("prompt") or "").strip():
+            raise DomainError(ErrorCode.INVALID_REQUEST, "prompt is required")
+        if not (isinstance(inputs.get("control_image"), dict) and inputs["control_image"].get("asset_id")):
+            raise DomainError(ErrorCode.INVALID_REQUEST, "control_image.asset_id is required")
+        control_type = str(inputs.get("control_type") or "pose")
+        if control_type not in {"pose", "depth", "canny"}:
+            raise DomainError(ErrorCode.INVALID_REQUEST, "control_type must be pose, depth, or canny")
+    if operation == "image.layered":
+        if not (isinstance(inputs.get("image"), dict) and inputs["image"].get("asset_id")):
+            raise DomainError(ErrorCode.INVALID_REQUEST, "image.asset_id is required")
+        layers = inputs.get("layers")
+        if layers is not None and (int(layers) < 1 or int(layers) > 8):
+            raise DomainError(ErrorCode.INVALID_PARAMETER, "layers must be 1-8")
     if operation == "image.upscale" and not (isinstance(inputs.get("image"), dict) and inputs["image"].get("asset_id")):
         raise DomainError(ErrorCode.INVALID_REQUEST, "image.asset_id is required")
     if operation == "video.generate" and not str(inputs.get("prompt") or "").strip():
@@ -521,5 +549,5 @@ def _validate_inputs(operation: str, inputs: dict[str, Any], _max_upload: int) -
     if count is not None and (int(count) < 1 or int(count) > 8):
         raise DomainError(ErrorCode.INVALID_PARAMETER, "candidate_count must be 1-8")
     duration = inputs.get("duration_seconds")
-    if duration is not None and (float(duration) < 1 or float(duration) > 10):
-        raise DomainError(ErrorCode.INVALID_PARAMETER, "duration_seconds must be 1-10")
+    if duration is not None and (float(duration) < 1 or float(duration) > 30):
+        raise DomainError(ErrorCode.INVALID_PARAMETER, "duration_seconds must be 1-30")

@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,8 +18,9 @@ try:
     import yaml
     from huggingface_hub import hf_hub_download
     from huggingface_hub.errors import GatedRepoError, HfHubHTTPError
+    from tqdm.auto import tqdm
 except ImportError:
-    print("Install: pip install pyyaml huggingface_hub", file=sys.stderr)
+    print("Install: pip install pyyaml huggingface_hub tqdm", file=sys.stderr)
     sys.exit(1)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +59,9 @@ def write_state(**fields) -> None:
         "current": None,
         "currentBundle": None,
         "currentFile": None,
+        "currentBytes": None,
+        "currentTotal": None,
+        "currentPercent": None,
         "startedAt": None,
         "finishedAt": None,
         "error": None,
@@ -69,6 +74,32 @@ def write_state(**fields) -> None:
     state.update(fields)
     DOWNLOAD_STATE.parent.mkdir(parents=True, exist_ok=True)
     DOWNLOAD_STATE.write_text(json.dumps(state, indent=2) + "\n")
+
+
+class _StateTqdm(tqdm):
+    """Write live byte progress into download-state.json for the control UI."""
+
+    def __init__(self, *args, **kwargs):
+        self._last_state_write = 0.0
+        super().__init__(*args, **kwargs)
+
+    def update(self, n: float | int = 1):
+        result = super().update(n)
+        self._emit_state(force=self.n == self.total)
+        return result
+
+    def _emit_state(self, *, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and now - self._last_state_write < 0.5:
+            return
+        self._last_state_write = now
+        total = int(self.total or 0)
+        n = int(self.n or 0)
+        write_state(
+            currentBytes=n,
+            currentTotal=total or None,
+            currentPercent=round(100.0 * n / total, 1) if total else None,
+        )
 
 
 def load_catalog() -> dict:
@@ -123,10 +154,13 @@ def download_file(
         current=f"{repo}/{remote_path}",
         currentFile=local_path.name,
         currentBundle=bundle_id,
+        currentBytes=0,
+        currentTotal=None,
+        currentPercent=0.0,
     )
     print(f"  download: {repo}/{remote_path}")
     try:
-        cached = hf_hub_download(repo_id=repo, filename=remote_path, token=token)
+        cached = hf_hub_download(repo_id=repo, filename=remote_path, token=token, tqdm_class=_StateTqdm)
     except GatedRepoError:
         raise RuntimeError(_gated_hint(repo)) from None
     except HfHubHTTPError as exc:
@@ -150,7 +184,14 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.dry_run:
-        write_state(status="running", startedAt=_now(), finishedAt=None, error=None, current=None)
+        write_state(
+            status="running",
+            startedAt=_now(),
+            finishedAt=None,
+            error=None,
+            current=None,
+            failedFiles=[],
+        )
 
     if args.prune_cache:
         os.environ["DOWNLOAD_PRUNE_CACHE"] = "1"
@@ -161,6 +202,7 @@ def main() -> int:
         installed: dict = {}
         if INSTALLED.exists():
             installed = json.loads(INSTALLED.read_text())
+        failures: list[dict] = []
 
         for model in catalog["models"]:
             mid = model["id"]
@@ -173,7 +215,13 @@ def main() -> int:
                 raise RuntimeError(f"BLOCKED {mid}: commercial flag false")
 
             if not args.dry_run:
-                _require_token(model, token)
+                try:
+                    _require_token(model, token)
+                except RuntimeError as exc:
+                    print(f"ERROR: {exc}", file=sys.stderr)
+                    failures.append({"bundleId": mid, "name": mid, "error": str(exc)})
+                    write_state(failedFiles=failures, lastError=str(exc))
+                    continue
 
             if not args.dry_run:
                 write_state(status="running", currentBundle=mid, current=mid)
@@ -181,6 +229,7 @@ def main() -> int:
             print(f"\n=== {mid} ({license_id}) ===")
             root = dest_root(model["dest"])
             files_meta = []
+            bundle_failed = False
 
             for spec in model.get("files", []):
                 if spec.get("optional") and args.dry_run:
@@ -200,12 +249,20 @@ def main() -> int:
                     )
                     files_meta.append({"local": str(local), "sha256": sha256_file(local)})
                 except Exception as e:
+                    print(f"  {'optional skip' if spec.get('optional') else 'ERROR'}: {e}", file=sys.stderr)
                     if spec.get("optional"):
-                        print(f"  optional skip: {e}")
-                    else:
-                        raise
+                        continue
+                    bundle_failed = True
+                    failures.append(
+                        {
+                            "bundleId": mid,
+                            "name": spec["local"],
+                            "error": str(e),
+                        }
+                    )
+                    write_state(failedFiles=failures, lastError=str(e))
 
-            if not args.dry_run:
+            if not args.dry_run and not bundle_failed:
                 installed[mid] = {
                     "license": license_id,
                     "dest": model["dest"],
@@ -224,7 +281,34 @@ def main() -> int:
             INSTALLED.parent.mkdir(parents=True, exist_ok=True)
             INSTALLED.write_text(json.dumps(installed, indent=2) + "\n")
             print(f"\nWrote {INSTALLED}")
-            write_state(status="completed", current=None, finishedAt=_now(), error=None)
+            if failures:
+                summary = "; ".join(f"{f['bundleId']}: {f['error']}" for f in failures)
+                write_state(
+                    status="failed",
+                    current=None,
+                    currentFile=None,
+                    currentBundle=None,
+                    currentBytes=None,
+                    currentTotal=None,
+                    currentPercent=None,
+                    finishedAt=_now(),
+                    error=summary,
+                    failedFiles=failures,
+                )
+                print(f"ERROR: {len(failures)} file(s) failed. Other bundles finished.", file=sys.stderr)
+                return 1
+            write_state(
+                status="completed",
+                current=None,
+                currentFile=None,
+                currentBundle=None,
+                currentBytes=None,
+                currentTotal=None,
+                currentPercent=None,
+                finishedAt=_now(),
+                error=None,
+                failedFiles=[],
+            )
         return 0
     except Exception as exc:
         if not args.dry_run:

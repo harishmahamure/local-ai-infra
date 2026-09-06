@@ -47,6 +47,8 @@ function dlKind(state) {
 
 function fileStateBadge(state) {
   if (state === "ok") return ["ok", "Downloaded"];
+  if (state === "downloading") return ["warn", "Downloading"];
+  if (state === "failed") return ["bad", "Failed"];
   if (state === "missing") return ["idle", "Missing"];
   if (state === "empty") return ["bad", "Empty"];
   return ["idle", state];
@@ -58,6 +60,7 @@ const routes = {
   "/upscale": "upscale",
   "/ltx-video": "ltx-video",
   "/downloads": "downloads",
+  "/cleanup": "cleanup",
   "/runtime": "runtime",
   "/models": "models",
 };
@@ -77,6 +80,35 @@ let ltxPollTimer = null;
 
 const LTX_BUNDLES = ["ltx-2.5-distilled", "ltx-2.5-studio", "ltx-2.5-prompt-enhancer"];
 
+const GEN_ASPECTS = {
+  "16:9": [1920, 1080],
+  "9:16": [1080, 1920],
+  "1:1": [1080, 1080],
+  "4:5": [1080, 1350],
+  "2:3": [1080, 1620],
+};
+
+const GEN_FLOWS = [
+  { id: "t2i", label: "Text-to-Image", hint: "Describe a scene. Default 1920×1080 unless you pick another aspect.", fields: ["prompt", "size", "batch", "upscale"], promptRequired: true, placeholder: "A sunlit kitchen, steam rising from a copper kettle, 35mm still." },
+  { id: "text_edit", label: "In-image text edit", hint: "Change signage, labels, or printed text on one image.", fields: ["prompt", "image1"], promptRequired: true, placeholder: "Change the storefront sign to say OPEN LATE." },
+  { id: "merge", label: "Multi-image merge", hint: "Combine 2–3 references: character, garment, optional background.", fields: ["prompt", "image1", "image2", "image3"], promptRequired: true, placeholder: "The person from image 1 wearing the jacket from image 2, standing in the scene from image 3." },
+  { id: "semantic_edit", label: "Semantic instruction edit", hint: "Relight, reframe, or restyle one image with a natural-language instruction.", fields: ["prompt", "image1"], promptRequired: true, placeholder: "Warm golden-hour lighting, slight push-in, keep the same person and wardrobe." },
+  { id: "layered", label: "Layered decomposition", hint: "Split one image into RGBA layers. Prompt is optional.", fields: ["prompt", "image1", "layers"], promptRequired: false, placeholder: "Optional: keep the subject on layer 1, background on layer 2." },
+  { id: "control", label: "Union ControlNet", hint: "Guide pose, depth, or edges from a reference still.", fields: ["prompt", "image1", "control", "strength"], promptRequired: true, placeholder: "A detective in a 1940s trench coat, matching this pose." },
+  { id: "lightning", label: "4-step Lightning", hint: "Fast preview. Locked to 4 steps, CFG 1.0, Lightning LoRA.", fields: ["prompt", "size", "batch", "upscale"], promptRequired: true, placeholder: "Quick concept: neon alley, wet asphalt, magenta signage." },
+];
+
+const LTX_MODE_CARDS = [
+  { id: "t2v", label: "Text to video", hint: "Generate from a written shot." },
+  { id: "i2v", label: "Image to video", hint: "Animate a start frame." },
+  { id: "a2v", label: "Audio to video", hint: "Drive the clip from an uploaded track." },
+  { id: "flf2v", label: "First + last frames", hint: "Interpolate between two stills." },
+  { id: "lipsync", label: "Lip sync", hint: "Image + audio. FLF / FML are sub-options." },
+  { id: "motion_transfer", label: "Motion transfer", hint: "Copy motion from a reference video." },
+];
+
+let selectedGenFlow = "t2i";
+
 const IMAGE_BUNDLES = [
   "qwen-image-2512-fp8",
   "qwen-image-2512-lightning-lora",
@@ -88,6 +120,7 @@ const IMAGE_BUNDLES = [
   "qwen-controlnet-2512-fun-union",
   "qwen-controlnet-diffsynth",
   "qwen-image-edit-2511-fp8",
+  "qwen-image-layered",
   "chroma1-hd",
   "upscalers-esrgan",
   "gemma-4-e4b",
@@ -112,6 +145,7 @@ async function refresh() {
     ["status", "/api/v1/status"],
     ["models", "/api/v1/models"],
     ["downloads", "/api/v1/downloads"],
+    ["cleanup", "/api/v1/cleanup"],
     ["capabilities", "/api/v1/capabilities"],
   ];
   const results = await Promise.allSettled(endpoints.map(([, path]) => api(path)));
@@ -126,11 +160,14 @@ async function refresh() {
   });
   renderDashboard();
   renderDownloads();
+  renderCleanup();
   renderRuntime();
   renderModels();
   renderCapabilities();
+  renderGenFlowCards();
   renderUpscaleCapabilities();
   renderLtxCapabilities();
+  renderLtxModeCards();
   $("#lastRefresh").textContent = "Updated " + new Date().toLocaleTimeString();
   if (errors.length) toast(errors.join(" · "));
 }
@@ -146,7 +183,9 @@ function renderDashboard() {
   $("#dashBundles").textContent = `${p.bundlesComplete || 0} / ${p.bundlesTotal || 0} bundles`;
   const pct = p.percentComplete || 0;
   $("#dashProgressBar").style.width = `${pct}%`;
-  $("#dashProgressLabel").textContent = `${pct}% required files on disk`;
+  $("#dashProgressLabel").textContent = downloads.running
+    ? `${pct}% complete (download running)`
+    : `${pct}% required files on disk`;
   if (downloads.running && downloads.currentFile) {
     $("#dashCurrent").textContent = `Downloading: ${downloads.currentFile}`;
   } else if (downloads.currentBundle) {
@@ -164,14 +203,119 @@ function renderCapabilities() {
   const defaultRes = caps.defaultWidth && caps.defaultHeight
     ? `${caps.defaultWidth}×${caps.defaultHeight}`
     : "1920×1080";
+  const flows = caps.flows || [];
+  const flowsReady = flows.filter(f => f.ready).length;
   $("#capSummary").textContent =
-    `${ready}/${presets.length} presets ready · modes: ${(caps.modes || []).join(", ")} · default: ${defaultRes} · fast gen: ${fastDefault}`;
+    `${flowsReady}/${flows.length || GEN_FLOWS.length} flows ready · ${ready}/${presets.length} presets · modes: ${(caps.modes || []).join(", ")} · default: ${defaultRes} · fast gen: ${fastDefault}`;
   $("#capPresets").innerHTML = presets.map(p => {
     const badge = p.ready ? `<span class="badge ok">ready</span>` : `<span class="badge warn">missing</span>`;
     return `<div class="cap-preset"><strong>${p.id}</strong> ${badge}
       <div class="meta">${p.label} · ${p.mode}</div>
       <div class="meta">${p.when_to_use}</div></div>`;
   }).join("");
+}
+
+function flowReady(flowId) {
+  const fromApi = (cache.capabilities?.flows || []).find(f => f.id === flowId);
+  if (fromApi && typeof fromApi.ready === "boolean") return fromApi.ready;
+  const spec = GEN_FLOWS.find(f => f.id === flowId);
+  const bundles = fromApi?.bundles || spec?.bundles || [];
+  const map = Object.fromEntries((cache.models?.bundles || []).map(b => [b.id, b]));
+  if (!bundles.length) return true;
+  return bundles.every(id => map[id]?.status === "complete");
+}
+
+function renderGenFlowCards() {
+  const root = $("#genFlowCards");
+  if (!root) return;
+  root.innerHTML = GEN_FLOWS.map(flow => {
+    const ready = flowReady(flow.id);
+    const active = selectedGenFlow === flow.id;
+    return `<button type="button" class="flow-card${active ? " active" : ""}" data-flow="${flow.id}" ${ready ? "" : "disabled"}>
+      <strong>${flow.label}</strong>
+      <div class="meta">${ready ? flow.hint : "Models missing"}</div>
+    </button>`;
+  }).join("");
+  root.querySelectorAll("[data-flow]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      selectedGenFlow = btn.dataset.flow;
+      renderGenFlowCards();
+      updateGenFlowUi();
+    });
+  });
+  updateGenFlowUi();
+}
+
+function updateGenFlowUi() {
+  const spec = GEN_FLOWS.find(f => f.id === selectedGenFlow) || GEN_FLOWS[0];
+  const ready = flowReady(spec.id);
+  if ($("#genFlowTitle")) $("#genFlowTitle").textContent = spec.label;
+  if ($("#genFlowHint")) $("#genFlowHint").textContent = spec.hint;
+  const lock = $("#genFlowLock");
+  if (lock) lock.hidden = ready;
+  const note = $("#genLightningNote");
+  if (note) note.hidden = spec.id !== "lightning";
+  if ($("#genPrompt")) $("#genPrompt").placeholder = spec.placeholder || "";
+  const labels = {
+    t2i: "Prompt",
+    lightning: "Prompt",
+    text_edit: "Text instruction",
+    semantic_edit: "Semantic instruction",
+    merge: "Merge instruction",
+    layered: "Content prompt (optional)",
+    control: "Prompt",
+  };
+  if ($("#genPromptLabel")) $("#genPromptLabel").textContent = labels[spec.id] || "Prompt";
+  const imageLabels = {
+    text_edit: "Image to edit",
+    semantic_edit: "Image to edit",
+    merge: "Image 1 — character / identity",
+    layered: "Image to decompose",
+    control: "Guide image",
+  };
+  if ($("#genImage1Label")) $("#genImage1Label").textContent = imageLabels[spec.id] || "Image";
+  $$("[data-gen]").forEach(el => {
+    const key = el.dataset.gen;
+    const on = spec.fields.includes(key);
+    el.style.display = on ? "block" : "none";
+    const required = (key === "prompt" && spec.promptRequired)
+      || (key === "image1" && ["text_edit", "semantic_edit", "merge", "layered", "control"].includes(spec.id))
+      || (key === "image2" && spec.id === "merge");
+    el.dataset.required = required ? "1" : "0";
+  });
+  if ($("#genSubmit")) $("#genSubmit").disabled = !ready;
+}
+
+function renderLtxModeCards() {
+  const root = $("#ltxModeCards");
+  if (!root) return;
+  const ready = !!cache.capabilities?.ltxVideo?.ready;
+  const current = $("#ltxMode")?.value || "t2v";
+  const selectedCard = current.startsWith("lipsync") ? "lipsync" : current;
+  root.innerHTML = LTX_MODE_CARDS.map(mode => {
+    const active = selectedCard === mode.id;
+    return `<button type="button" class="flow-card${active ? " active" : ""}" data-ltx-mode="${mode.id}" ${ready ? "" : "disabled"}>
+      <strong>${mode.label}</strong>
+      <div class="meta">${ready ? mode.hint : "LTX not ready"}</div>
+    </button>`;
+  }).join("");
+  root.querySelectorAll("[data-ltx-mode]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      const id = btn.dataset.ltxMode;
+      if (id === "lipsync") {
+        const picked = document.querySelector("input[name=ltxLipsyncKind]:checked")?.value || "lipsync";
+        $("#ltxMode").value = picked;
+      } else {
+        $("#ltxMode").value = id;
+      }
+      renderLtxModeCards();
+      updateLtxModeUi();
+    });
+  });
+  updateLtxModeUi();
+  if ($("#ltxSubmit")) $("#ltxSubmit").disabled = !ready;
 }
 
 function renderUpscaleCapabilities() {
@@ -193,12 +337,11 @@ function renderLtxCapabilities() {
     const orientations = (ltx.orientations || []).map(o => o.id).join(", ");
     const studio = ltx.studioReady ? "studio ✓" : "studio missing";
     const enh = ltx.promptEnhanceReady ? "enhancer ✓" : "enhancer optional";
-    const cam = ltx.cameraLorasReady ? "camera LoRAs ✓" : "camera LoRAs optional";
     const ic = ltx.icLoraReady ? "IC-LoRA ✓" : "IC-LoRA optional";
     const lip = ltx.lipdubReady ? "LipDub ✓" : "LipDub optional";
     const motion = ltx.motionTrackReady ? "Motion Track ✓" : "Motion Track optional";
     const wf = ltx.workflow?.label || "LTX Studio quality";
-    summaryEl.innerHTML = `${badge} · LTX-2.5 · ${ready}/${presets.length} presets · ${studio} · ${enh} · ${cam} · ${ic} · ${lip} · ${motion} · ${wf} · max ${ltx.maxDurationSeconds || 10}s`;
+    summaryEl.innerHTML = `${badge} · LTX-2.5 · ${ready}/${presets.length} presets · ${studio} · ${enh} · ${ic} · ${lip} · ${motion} · ${wf} · max ${ltx.maxDurationSeconds || 10}s`;
   }
   const root = $("#ltxCapPresets");
   if (!root) return;
@@ -290,31 +433,77 @@ function syncLtxAdvancedFromMain() {
 function renderDownloads() {
   const { downloads } = cache;
   const p = downloads.progress || {};
+  const pct = p.percentComplete || 0;
+  const running = downloads.running === true || downloads.status === "running";
   setBadge($("#dlBadge"), downloads.status || "idle", dlKind(downloads.status));
+  $("#dlPercent").textContent = `${pct}%`;
   $("#dlSummary").textContent =
     `${p.bytesOnDiskHuman || "0 B"} on disk · ${p.filesComplete || 0}/${p.filesRequired || 0} required files · ${p.bundlesComplete || 0}/${p.bundlesTotal || 0} bundles`;
-  $("#dlProgressBar").style.width = `${p.percentComplete || 0}%`;
-  $("#dlProgressLabel").textContent = `${p.percentComplete || 0}% complete`;
+  $("#dlProgressBar").style.width = `${pct}%`;
+  const bar = $("#dlProgress");
+  if (bar) bar.setAttribute("aria-valuenow", String(pct));
+  if (running && downloads.currentFile && (p.currentFilePercent != null || p.currentBytesHuman)) {
+    const got = p.currentBytesHuman || "0 B";
+    const filePct = p.currentFilePercent != null ? ` (${p.currentFilePercent}%)` : "";
+    const tot = p.currentTotalHuman ? ` / ${p.currentTotalHuman}` : "";
+    $("#dlProgressLabel").textContent =
+      `Running · ${pct}% catalog · ${downloads.currentFile} ${got}${tot}${filePct}`;
+  } else if (running) {
+    $("#dlProgressLabel").textContent = `Running · ${pct}% complete`;
+  } else {
+    $("#dlProgressLabel").textContent = `${pct}% complete`;
+  }
   $("#dlCurrent").textContent = downloads.currentFile
     ? `Current file: ${downloads.currentFile}`
     : downloads.current
       ? `Current: ${downloads.current}`
       : "";
   $("#dlLog").textContent = (downloads.logTail || []).join("\n") || "(no log yet)";
-  $("#startDownload").disabled = downloads.running === true;
+  $("#startDownload").disabled = running;
 
   const tbody = $("#filesBody");
   tbody.innerHTML = (p.files || []).map(f => {
     const [kind, label] = fileStateBadge(f.state);
     const rowClass = f.isCurrent ? "current-row" : f.state === "ok" ? "ok-row" : "missing-row";
+    const filePct = f.percent;
+    let progressCell = "—";
+    if (filePct != null) {
+      progressCell = `<div class="file-progress"><div class="progress"><span style="width:${filePct}%"></span></div><span>${filePct}%</span></div>`;
+    }
     return `<tr class="${rowClass}">
       <td><span class="badge ${badgeClass(kind)}">${label}</span></td>
       <td>${f.bundleId}</td>
-      <td class="file-name">${f.name}</td>
+      <td class="file-name">${f.name}${f.error ? `<div class="meta">${f.error}</div>` : ""}</td>
+      <td>${progressCell}</td>
       <td>${f.sizeHuman}</td>
       <td>${f.optional ? "yes" : ""}</td>
     </tr>`;
   }).join("");
+}
+
+function renderCleanup() {
+  const cu = cache.cleanup || {};
+  const bytes = cu.bytesHuman || "0 B";
+  const files = cu.files || 0;
+  setBadge($("#cuBadge"), cu.status || "idle", files ? "warn" : "idle");
+  if ($("#cuBytes")) $("#cuBytes").textContent = bytes;
+  if ($("#cuSummary")) {
+    $("#cuSummary").textContent =
+      `${files} generated file(s) · ${bytes}. Model weights are never deleted.`;
+  }
+  const skipped = cu.skippedJobIds || [];
+  if ($("#cuSkip")) {
+    $("#cuSkip").textContent = skipped.length
+      ? `Skipping ${skipped.length} running job(s)`
+      : "No running jobs to protect.";
+  }
+  const tbody = $("#cuTargets");
+  if (tbody) {
+    const rows = cu.targets || [];
+    tbody.innerHTML = rows.length
+      ? rows.map(t => `<tr><td>${t.id}</td><td>${t.files}</td><td>${t.bytesHuman}</td></tr>`).join("")
+      : `<tr><td colspan="3">Nothing to remove</td></tr>`;
+  }
 }
 
 function normalizeProfile(profile) {
@@ -540,17 +729,30 @@ async function pollGenerateJob(jobId) {
 }
 
 async function submitGenerate() {
+  const spec = GEN_FLOWS.find(f => f.id === selectedGenFlow) || GEN_FLOWS[0];
+  if (!flowReady(spec.id)) {
+    toast("This flow is disabled until its models are downloaded");
+    return;
+  }
   const prompt = $("#genPrompt").value.trim();
-  if (!prompt) {
+  if (spec.promptRequired && !prompt) {
     toast("Enter a prompt");
     return;
   }
-  const count = Math.min(10, Math.max(1, parseInt($("#genCount").value, 10) || 1));
-  const fileInput = $("#genImage");
-  let image = null;
-  if (fileInput.files?.[0]) {
-    image = await fileToBase64(fileInput.files[0]);
+  const files = [
+    $("#genImage1")?.files?.[0],
+    $("#genImage2")?.files?.[0],
+    $("#genImage3")?.files?.[0],
+  ];
+  if (["text_edit", "semantic_edit", "layered", "control"].includes(spec.id) && !files[0]) {
+    toast("Upload an image");
+    return;
   }
+  if (spec.id === "merge" && (!files[0] || !files[1])) {
+    toast("Merge needs at least two images");
+    return;
+  }
+  const count = Math.min(10, Math.max(1, parseInt($("#genCount")?.value, 10) || 1));
 
   $("#genSubmit").disabled = true;
   $("#genOutput").textContent = "Starting job…";
@@ -558,23 +760,40 @@ async function submitGenerate() {
   $("#genStatus").textContent = "Submitting…";
 
   try {
-    const body = { prompt, count };
-    const fastRaw = $("#genFastMode").value;
-    if (fastRaw === "true") body.fastGenMode = true;
-    else if (fastRaw === "false") body.fastGenMode = false;
-    const stepsRaw = $("#genSteps").value;
-    if (stepsRaw) body.steps = parseInt(stepsRaw, 10);
-    const upscaleRaw = $("#genUpscale").value;
-    if (upscaleRaw === "true") body.upscale = true;
-    else if (upscaleRaw === "false") body.upscale = false;
-    if (image) body.image = image;
+    const body = { flow: spec.id, prompt, count };
+    if (spec.fields.includes("size")) {
+      const aspect = $("#genAspect")?.value || "16:9";
+      const dims = GEN_ASPECTS[aspect];
+      if (dims) {
+        body.width = dims[0];
+        body.height = dims[1];
+      }
+    }
+    if (spec.fields.includes("upscale") && $("#genUpscale")?.value === "true") body.upscale = true;
+    if (spec.id === "control") {
+      body.controlType = $("#genControlType")?.value || "pose";
+      const strength = optionalNum($("#genControlStrength")?.value);
+      if (strength !== undefined) body.controlStrength = strength;
+    }
+    if (spec.id === "layered") {
+      body.layers = Math.min(8, Math.max(2, parseInt($("#genLayers")?.value, 10) || 3));
+    }
+    const encoded = [];
+    for (const file of files) {
+      if (file) encoded.push(await fileToBase64(file));
+    }
+    if (encoded.length === 1) body.image = encoded[0];
+    if (encoded.length > 1) {
+      body.image = encoded[0];
+      body.images = encoded;
+    }
     const job = await api("/api/v1/generate", { method: "POST", body: JSON.stringify(body) });
     $("#genStatus").textContent = `Job ${job.jobId} — ${job.status} (0/${job.count || count})`;
     if (genPollTimer) clearInterval(genPollTimer);
     genPollTimer = setInterval(() => pollGenerateJob(job.jobId), 2000);
     await pollGenerateJob(job.jobId);
   } catch (err) {
-    $("#genSubmit").disabled = false;
+    $("#genSubmit").disabled = !flowReady(spec.id);
     toast(err.message);
   }
 }
@@ -714,32 +933,41 @@ function ltxSubmitMode(mode) {
 
 function updateLtxModeUi() {
   const mode = $("#ltxMode")?.value || "t2v";
+  const card = LTX_MODE_CARDS.find(m => m.id === (mode.startsWith("lipsync") ? "lipsync" : mode));
+  if ($("#ltxFlowTitle") && card) $("#ltxFlowTitle").textContent = card.label;
+  if ($("#ltxFlowHint") && card) $("#ltxFlowHint").textContent = card.hint;
+  const ready = !!cache.capabilities?.ltxVideo?.ready;
+  const lock = $("#ltxFlowLock");
+  if (lock) lock.hidden = ready;
+  if ($("#ltxSubmit") && !ltxPollTimer) $("#ltxSubmit").disabled = !ready;
+  const variants = $("#ltxLipsyncVariants");
+  if (variants) variants.hidden = !mode.startsWith("lipsync");
   const showStart = ["i2v", "flf2v", "lipsync", "lipsync_flf", "lipsync_fml", "a2v", "motion_transfer"].includes(mode);
-  const showEnd = ["flf2v", "lipsync", "lipsync_flf", "lipsync_fml", "a2v"].includes(mode);
-  const showMid = ["lipsync", "lipsync_fml"].includes(mode);
+  const showEnd = ["flf2v", "lipsync_flf", "lipsync_fml"].includes(mode);
+  const showMid = mode === "lipsync_fml";
   const showAudio = ["a2v", "lipsync", "lipsync_flf", "lipsync_fml"].includes(mode);
   const startReq = ["i2v", "flf2v", "lipsync", "lipsync_flf", "lipsync_fml"].includes(mode);
-  const audioReq = showAudio;
   const set = (id, on, required) => {
     const el = $(id);
     if (!el) return;
     el.style.display = on ? "block" : "none";
+    el.dataset.required = required ? "1" : "0";
     const label = el.querySelector("span");
     if (label && required != null) label.dataset.required = required ? "1" : "0";
   };
   set("#ltxImageField", showStart, startReq);
-  set("#ltxEndImageField", showEnd, mode === "flf2v" || mode === "lipsync_flf" || mode === "lipsync_fml");
-  set("#ltxMiddleImageField", showMid, mode === "lipsync_fml");
-  set("#ltxAudioField", showAudio, audioReq);
+  set("#ltxEndImageField", showEnd, showEnd);
+  set("#ltxMiddleImageField", showMid, showMid);
+  set("#ltxAudioField", showAudio, showAudio);
   const showRef = mode === "motion_transfer" || !mode.startsWith("lipsync");
   set("#ltxRefVideoField", showRef, mode === "motion_transfer");
-  const audioPrompt = $("#ltxAudio")?.closest("label");
+  const audioPrompt = $("#ltxAudioPromptField") || $("#ltxAudio")?.closest("label");
   if (audioPrompt) audioPrompt.style.display = showAudio ? "none" : "block";
   const durationInput = $("#ltxDuration");
   const durationLabel = durationInput?.closest("label");
   if (durationInput) {
     durationInput.disabled = showAudio;
-    durationInput.placeholder = showAudio ? "from audio (max 10s)" : "4";
+    durationInput.placeholder = showAudio ? "from audio (max 30s)" : "4";
   }
   if (durationLabel) durationLabel.style.opacity = showAudio ? "0.6" : "1";
   updateLtxIcUi();
@@ -750,10 +978,14 @@ function updateLtxIcUi() {
   const explicitIc = mode.startsWith("lipsync") || mode === "motion_transfer";
   const hasVideo = !!$("#ltxRefVideo")?.files?.length;
   const box = $("#ltxIcFields");
-  if (box) box.style.display = !explicitIc && hasVideo ? "block" : "none";
+  if (box) box.hidden = explicitIc || !hasVideo;
 }
 
 async function submitLtxVideo() {
+  if (!cache.capabilities?.ltxVideo?.ready) {
+    toast("LTX video is not ready — download the distilled bundle first");
+    return;
+  }
   const uiMode = $("#ltxMode").value;
   const mode = ltxSubmitMode(uiMode);
   const prompt = $("#ltxPrompt").value.trim();
@@ -823,7 +1055,6 @@ async function submitLtxVideo() {
     if (!mode.startsWith("lipsync") && mode !== "motion_transfer") {
       if ($("#ltxIcLora")?.value) body.icLora = $("#ltxIcLora").value;
       if ($("#ltxControlType")?.value) body.controlType = $("#ltxControlType").value;
-      if ($("#ltxDetailer")?.checked) body.detailer = true;
     }
     const neg = $("#ltxNegative")?.value.trim();
     if (neg) body.negativePrompt = neg;
@@ -835,6 +1066,12 @@ async function submitLtxVideo() {
     if ($("#ltxAudioFile")?.files?.[0]) body.audio = await fileToBase64($("#ltxAudioFile").files[0]);
     const refVideo = $("#ltxRefVideo")?.files?.[0];
     if (refVideo) body.referenceVideo = await fileToBase64(refVideo);
+    const sourceJobId = $("#ltxSourceJobId")?.value.trim();
+    const sourceFilename = $("#ltxSourceFilename")?.value.trim();
+    if (sourceJobId) body.sourceJobId = sourceJobId;
+    if (sourceFilename) body.sourceFilename = sourceFilename;
+    const icLoraStrength = optionalNum($("#ltxIcLoraStrength")?.value);
+    if (icLoraStrength !== undefined) body.icLoraStrength = icLoraStrength;
     const job = await api("/api/v1/ltx-video", { method: "POST", body: JSON.stringify(body) });
     $("#ltxStatus").textContent = `Job ${job.jobId} — ${job.status}`;
     if (ltxPollTimer) clearInterval(ltxPollTimer);
@@ -871,6 +1108,33 @@ function bindActions() {
     } catch (err) { toast(err.message); }
   });
   $("#refreshBtn")?.addEventListener("click", refresh);
+  $("#cuRefresh")?.addEventListener("click", refresh);
+  $("#cuRun")?.addEventListener("click", async () => {
+    const targets = [];
+    if ($("#cuImages")?.checked) targets.push("images");
+    if ($("#cuVideos")?.checked) targets.push("videos");
+    if ($("#cuComfy")?.checked) targets.push("comfy_outputs");
+    if (!targets.length) {
+      toast("Select images, videos, or ComfyUI output");
+      return;
+    }
+    const label = targets.join(" + ");
+    if (!window.confirm(`Delete ${label} from the GPU box? Model weights are kept.`)) return;
+    try {
+      $("#cuRun").disabled = true;
+      const result = await api("/api/v1/cleanup", { method: "POST", body: JSON.stringify({ targets }) });
+      cache.cleanup = result;
+      renderCleanup();
+      $("#cuResult").textContent = result.deletedFiles
+        ? `Removed ${result.deletedFiles} file(s) · ${result.deletedBytesHuman}`
+        : "Nothing matched those targets.";
+      toast($("#cuResult").textContent);
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      $("#cuRun").disabled = false;
+    }
+  });
   $("#genSubmit")?.addEventListener("click", submitGenerate);
   $("#upSubmit")?.addEventListener("click", submitUpscale);
   $("#upClear")?.addEventListener("click", () => {
@@ -884,17 +1148,27 @@ function bindActions() {
     renderJobProgress($("#upProgress"), null);
   });
   $("#genClear")?.addEventListener("click", () => {
-    $("#genPrompt").value = "";
-    $("#genImage").value = "";
-    $("#genFastMode").value = "true";
-    $("#genSteps").value = "";
-    $("#genUpscale").value = "";
+    if ($("#genPrompt")) $("#genPrompt").value = "";
+    ["#genImage1", "#genImage2", "#genImage3"].forEach(id => { if ($(id)) $(id).value = ""; });
+    if ($("#genCount")) $("#genCount").value = "1";
+    if ($("#genUpscale")) $("#genUpscale").value = "";
+    if ($("#genAspect")) $("#genAspect").value = "16:9";
+    if ($("#genLayers")) $("#genLayers").value = "3";
+    if ($("#genControlType")) $("#genControlType").value = "pose";
+    if ($("#genControlStrength")) $("#genControlStrength").value = "0.85";
     $("#genOutput").textContent = "Submit a prompt to start.";
     $("#genPlan").textContent = "";
     $("#genStatus").textContent = "—";
     renderJobProgress($("#genProgress"), null);
   });
-  $("#ltxMode")?.addEventListener("change", updateLtxModeUi);
+  document.querySelectorAll("input[name=ltxLipsyncKind]").forEach(el => {
+    el.addEventListener("change", () => {
+      if (($("#ltxMode")?.value || "").startsWith("lipsync")) {
+        $("#ltxMode").value = el.value;
+        updateLtxModeUi();
+      }
+    });
+  });
   $("#ltxRefVideo")?.addEventListener("change", updateLtxIcUi);
   $("#ltxOrientation")?.addEventListener("change", syncLtxAdvancedFromMain);
   $("#ltxSpeed")?.addEventListener("change", syncLtxAdvancedFromMain);
@@ -909,10 +1183,12 @@ function bindActions() {
     if ($("#ltxMiddleImage")) $("#ltxMiddleImage").value = "";
     if ($("#ltxAudioFile")) $("#ltxAudioFile").value = "";
     if ($("#ltxRefVideo")) $("#ltxRefVideo").value = "";
+    if ($("#ltxSourceJobId")) $("#ltxSourceJobId").value = "";
+    if ($("#ltxSourceFilename")) $("#ltxSourceFilename").value = "";
+    if ($("#ltxIcLoraStrength")) $("#ltxIcLoraStrength").value = "";
     if ($("#ltxCameraMotion")) $("#ltxCameraMotion").value = "auto";
     if ($("#ltxIcLora")) $("#ltxIcLora").value = "auto";
     if ($("#ltxControlType")) $("#ltxControlType").value = "auto";
-    if ($("#ltxDetailer")) $("#ltxDetailer").checked = false;
     $("#ltxDuration").value = "";
     updateLtxModeUi();
     $("#ltxOutput").textContent = "Submit a prompt to start.";
@@ -926,5 +1202,19 @@ function bindActions() {
 window.addEventListener("hashchange", navigate);
 navigate();
 bindActions();
-refresh();
-setInterval(refresh, 5000);
+let refreshTimer = null;
+
+function armRefresh() {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  const running = cache.downloads?.running === true || cache.downloads?.status === "running";
+  const onDownloads = (location.hash.replace(/^#/, "") || "/") === "/downloads";
+  refreshTimer = setTimeout(async () => {
+    await refresh();
+    armRefresh();
+  }, running && onDownloads ? 1000 : 5000);
+}
+
+refresh().then(armRefresh);
+window.addEventListener("hashchange", () => {
+  if (cache.downloads) armRefresh();
+});

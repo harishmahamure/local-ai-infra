@@ -18,6 +18,7 @@
       <a href="#/upscale" data-route="/upscale">Upscale</a>
       <a href="#/ltx-video" data-route="/ltx-video">LTX video</a>
       <a href="#/downloads" data-route="/downloads">Downloads</a>
+      <a href="#/cleanup" data-route="/cleanup">Cleanup</a>
       <a href="#/runtime" data-route="/runtime">Runtime</a>
       <a href="#/models" data-route="/models">Models</a>
       <a href="/docs" target="_blank" rel="noopener">API</a>
@@ -53,56 +54,75 @@
           <a href="#/generate"><button class="secondary">Generate images →</button></a>
           <a href="#/ltx-video"><button class="secondary">LTX video →</button></a>
           <a href="#/downloads"><button class="secondary">View all files →</button></a>
+          <a href="#/cleanup"><button class="secondary">Remove outputs →</button></a>
         </div>
       </section>
     </section>
 
     <!-- Generate -->
     <section class="page" data-page="generate">
-      <div class="grid">
+      <p class="meta">Choose a Qwen flow. Each card uses a locked plan (no Gemma). Cards disable when the required bundle is missing.</p>
+      <div class="flow-grid" id="genFlowCards"></div>
+      <div class="grid gen-workspace">
         <section class="card">
-          <h2>Generate image</h2>
-          <p class="meta">Text prompts use Gemma; reference images use Qwen vision (llama-fast) → Qwen-Image executes. Default output: 1920×1080 unless the planner picks a preset with other dimensions.</p>
-          <label class="field">
-            <span>Prompt</span>
-            <textarea id="genPrompt" rows="5" placeholder="Describe the image you want…"></textarea>
+          <h2 id="genFlowTitle">Text-to-Image</h2>
+          <p class="meta" id="genFlowHint">Describe a scene. Default 1920×1080 unless you pick another aspect.</p>
+          <p class="meta" id="genFlowLock" hidden>Required models are not on disk. Download the missing bundle to enable this flow.</p>
+          <label class="field" data-gen="prompt">
+            <span id="genPromptLabel">Prompt</span>
+            <textarea id="genPrompt" rows="4" placeholder="Describe the image you want…"></textarea>
           </label>
-          <label class="field">
-            <span>Reference image (optional)</span>
-            <input type="file" id="genImage" accept="image/*" />
+          <label class="field" data-gen="image1">
+            <span id="genImage1Label">Image</span>
+            <input type="file" id="genImage1" accept="image/*" />
           </label>
-          <label class="field">
+          <label class="field" data-gen="image2">
+            <span>Image 2 — garment / second subject</span>
+            <input type="file" id="genImage2" accept="image/*" />
+          </label>
+          <label class="field" data-gen="image3">
+            <span>Image 3 — background (optional)</span>
+            <input type="file" id="genImage3" accept="image/*" />
+          </label>
+          <label class="field" data-gen="size">
+            <span>Size / aspect</span>
+            <select id="genAspect">
+              <option value="16:9">16:9 — 1920×1080</option>
+              <option value="9:16">9:16 — 1080×1920</option>
+              <option value="1:1">1:1 — 1080×1080</option>
+              <option value="4:5">4:5 — 1080×1350</option>
+              <option value="2:3">2:3 — 1080×1620</option>
+            </select>
+          </label>
+          <label class="field" data-gen="batch">
             <span>Batch count (1–10)</span>
             <input type="number" id="genCount" min="1" max="10" value="1" />
           </label>
-          <label class="field">
-            <span>Fast generation</span>
-            <select id="genFastMode">
-              <option value="">Auto (planner decides)</option>
-              <option value="true" selected>On (Lightning, 4 steps)</option>
-              <option value="false">Off (quality)</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Steps</span>
-            <select id="genSteps">
-              <option value="">Auto</option>
-              <option value="2">2 (Turbo)</option>
-              <option value="4">4 (Lightning)</option>
-              <option value="8">8</option>
-              <option value="20">20</option>
-              <option value="30">30 (Quality)</option>
-            </select>
-          </label>
-          <label class="field">
+          <label class="field" data-gen="upscale">
             <span>Upscale output</span>
             <select id="genUpscale">
-              <option value="">Auto</option>
+              <option value="">No</option>
               <option value="true">Yes (4× RealESRGAN)</option>
-              <option value="false">No</option>
             </select>
           </label>
-          <p class="meta">Each image is saved under <code>jobs/&lt;jobId&gt;/images/</code> on the GPU as it completes — recoverable if Wi‑Fi drops.</p>
+          <label class="field" data-gen="control">
+            <span>Control type</span>
+            <select id="genControlType">
+              <option value="pose">OpenPose</option>
+              <option value="depth">Depth</option>
+              <option value="canny">Canny</option>
+            </select>
+          </label>
+          <label class="field" data-gen="strength">
+            <span>Control strength</span>
+            <input type="number" id="genControlStrength" min="0" max="2" step="0.05" value="0.85" />
+          </label>
+          <label class="field" data-gen="layers">
+            <span>Layer count (2–8)</span>
+            <input type="number" id="genLayers" min="2" max="8" value="3" />
+          </label>
+          <p class="meta" id="genLightningNote" hidden>Preview quality — locked to 4 steps, CFG 1.0, and the Lightning LoRA.</p>
+          <p class="meta">Outputs save under <code>jobs/&lt;jobId&gt;/images/</code> on the GPU as they complete.</p>
           <div class="row">
             <button id="genSubmit">Generate</button>
             <button class="secondary" id="genClear">Clear</button>
@@ -170,10 +190,19 @@
 
     <!-- LTX video -->
     <section class="page" data-page="ltx-video">
-      <div class="grid">
+      <p class="meta">Pick a video mode. Cards disable until the LTX distilled bundle is on disk. Use <strong>Quality</strong> for 2-stage refine.</p>
+      <div class="flow-grid" id="ltxModeCards"></div>
+      <input type="hidden" id="ltxMode" value="t2v" />
+      <div class="grid gen-workspace">
         <section class="card">
-          <h2>LTX-2.5 video + audio</h2>
-          <p class="meta">Describe shot type, action, camera, lighting, and audio. Use <strong>Standard</strong> or <strong>Quality</strong> for sharp output (2-stage refine). Fast is preview-only and softer.</p>
+          <h2 id="ltxFlowTitle">Text to video</h2>
+          <p class="meta" id="ltxFlowHint">Describe shot type, action, camera, lighting, and audio.</p>
+          <p class="meta" id="ltxFlowLock" hidden>LTX video is not ready. Download <code>ltx-2.5-distilled</code> first.</p>
+          <div id="ltxLipsyncVariants" class="variant-row" hidden>
+            <label><input type="radio" name="ltxLipsyncKind" value="lipsync" checked /> Image + audio</label>
+            <label><input type="radio" name="ltxLipsyncKind" value="lipsync_flf" /> First + last (FLF)</label>
+            <label><input type="radio" name="ltxLipsyncKind" value="lipsync_fml" /> First + middle + last (FML)</label>
+          </div>
           <label class="field">
             <span>Orientation</span>
             <select id="ltxOrientation">
@@ -183,31 +212,10 @@
             </select>
           </label>
           <label class="field">
-            <span>Speed</span>
-            <select id="ltxSpeed">
-              <option value="standard">Standard</option>
-              <option value="fast">Fast (preview, softer)</option>
-              <option value="quality">Quality (slower, refine)</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Mode</span>
-            <select id="ltxMode">
-              <option value="t2v">Text to video</option>
-              <option value="a2v">Audio to video</option>
-              <option value="i2v">Image to video</option>
-              <option value="flf2v">First and last frames</option>
-              <option value="lipsync">Image + audio lip sync</option>
-              <option value="lipsync_flf">First and last + lip sync</option>
-              <option value="lipsync_fml">First, middle, last + lip sync</option>
-              <option value="motion_transfer">Motion transfer</option>
-            </select>
-          </label>
-          <label class="field">
             <span>Prompt</span>
             <textarea id="ltxPrompt" rows="4" placeholder="Wide shot of a rainy street at night. Slow dolly forward. Neon reflections on wet pavement…"></textarea>
           </label>
-          <label class="field">
+          <label class="field" id="ltxAudioPromptField">
             <span>Audio prompt (recommended)</span>
             <textarea id="ltxAudio" rows="2" placeholder="e.g. gentle rain, distant thunder — or: silent, no sound"></textarea>
           </label>
@@ -220,7 +228,7 @@
             <input type="file" id="ltxEndImage" accept="image/*" />
           </label>
           <label class="field" id="ltxMiddleImageField">
-            <span>Middle frame (optional lip sync)</span>
+            <span>Middle frame</span>
             <input type="file" id="ltxMiddleImage" accept="image/*" />
           </label>
           <label class="field" id="ltxAudioField">
@@ -228,64 +236,88 @@
             <input type="file" id="ltxAudioFile" accept="audio/*" />
           </label>
           <label class="field">
-            <span>Camera motion</span>
-            <select id="ltxCameraMotion">
-              <option value="auto">Auto (from prompt)</option>
-              <option value="none">None</option>
-              <option value="dolly_in">Dolly in</option>
-              <option value="dolly_out">Dolly out</option>
-              <option value="dolly_left">Dolly left</option>
-              <option value="dolly_right">Dolly right</option>
-              <option value="jib_up">Jib up</option>
-              <option value="jib_down">Jib down</option>
-              <option value="static">Static</option>
-            </select>
+            <span>Duration (seconds, 1–30)</span>
+            <input type="number" id="ltxDuration" min="1" max="30" step="0.5" placeholder="4" />
           </label>
-          <label class="field" id="ltxRefVideoField">
-            <span>Reference video (IC-LoRA / Detailer)</span>
-            <input type="file" id="ltxRefVideo" accept="video/*" />
-          </label>
-          <div id="ltxIcFields" style="display:none">
+
+          <div class="panel">
+            <h3>Camera motion</h3>
+            <p class="meta">Prompt-only on LTX-2.5. LTX-2 19B camera LoRAs are not compatible.</p>
             <label class="field">
-              <span>IC-LoRA</span>
-              <select id="ltxIcLora">
-                <option value="auto">Auto</option>
+              <span>Camera</span>
+              <select id="ltxCameraMotion">
+                <option value="auto">Auto (from prompt)</option>
                 <option value="none">None</option>
-                <option value="union">Union Control</option>
-                <option value="detailer">Detailer</option>
+                <option value="dolly_in">Dolly in</option>
+                <option value="dolly_out">Dolly out</option>
+                <option value="dolly_left">Dolly left</option>
+                <option value="dolly_right">Dolly right</option>
+                <option value="jib_up">Jib up</option>
+                <option value="jib_down">Jib down</option>
+                <option value="static">Static</option>
               </select>
             </label>
-            <label class="field">
-              <span>Control type</span>
-              <select id="ltxControlType">
-                <option value="auto">Auto</option>
-                <option value="depth">Depth</option>
-                <option value="canny">Canny</option>
-                <option value="pose">Pose</option>
-              </select>
-            </label>
-            <label class="field"><span><input type="checkbox" id="ltxDetailer" /> Detailer IC-LoRA</span></label>
           </div>
-          <label class="field">
-            <span>Duration (seconds, 1–10)</span>
-            <input type="number" id="ltxDuration" min="1" max="10" step="0.5" placeholder="4" />
-          </label>
+
+          <div class="panel" id="ltxIcPanel">
+            <h3>IC-LoRA / structure</h3>
+            <p class="meta">Upload a reference video when you want the shot to follow that structure. Union Control and control type appear after you pick a file (T2V / I2V / A2V / FLF). Uses the official LTX-2.3 IC-LoRA (compatible with 2.5).</p>
+            <label class="field" id="ltxRefVideoField">
+              <span>Reference video</span>
+              <input type="file" id="ltxRefVideo" accept="video/*" />
+            </label>
+            <div id="ltxIcFields" hidden>
+              <label class="field">
+                <span>IC-LoRA</span>
+                <select id="ltxIcLora">
+                  <option value="auto">Auto</option>
+                  <option value="none">None</option>
+                  <option value="union">Union Control</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Control type</span>
+                <select id="ltxControlType">
+                  <option value="auto">Auto</option>
+                  <option value="depth">Depth</option>
+                  <option value="canny">Canny</option>
+                  <option value="pose">Pose</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Quality / refine</h3>
+            <label class="field">
+              <span>Speed</span>
+              <select id="ltxSpeed">
+                <option value="standard">Standard</option>
+                <option value="fast">Fast (preview, softer)</option>
+                <option value="quality">Quality (slower, refine)</option>
+              </select>
+            </label>
+            <label class="field checkbox-field"><span><input type="checkbox" id="ltxRefine" /> Latent upscale refine (2-stage, LTX Studio)</span></label>
+            <label class="field"><span>Refine steps</span><input type="number" id="ltxRefineSteps" min="1" max="40" /></label>
+            <label class="field"><span>Refine denoise</span><input type="number" id="ltxRefineDenoise" min="0.05" max="1" step="0.05" /></label>
+          </div>
+
           <details class="field">
-            <summary>Advanced parameters</summary>
+            <summary>Advanced</summary>
             <label class="field"><span>Preset</span><select id="ltxPreset"></select></label>
+            <label class="field"><span>Source job ID</span><input type="text" id="ltxSourceJobId" placeholder="UUID from a generate job" /></label>
+            <label class="field"><span>Source filename</span><input type="text" id="ltxSourceFilename" placeholder="e.g. 0000_00_ComfyUI_00001_.png" /></label>
             <label class="field"><span>Seed</span><input type="number" id="ltxSeed" placeholder="random" /></label>
             <label class="field"><span>Width</span><input type="number" id="ltxWidth" min="256" max="2048" step="32" /></label>
             <label class="field"><span>Height</span><input type="number" id="ltxHeight" min="256" max="2048" step="32" /></label>
             <label class="field"><span>Steps</span><input type="number" id="ltxSteps" min="1" max="60" /></label>
-            <label class="field"><span>Video CFG (1.0 for distilled — higher degrades quality)</span><input type="number" id="ltxVideoCfg" min="1" max="15" step="0.1" placeholder="1" /></label>
+            <label class="field"><span>Video CFG (1.0 for distilled)</span><input type="number" id="ltxVideoCfg" min="1" max="15" step="0.1" placeholder="1" /></label>
             <label class="field"><span>Audio CFG</span><input type="number" id="ltxAudioCfg" min="1" max="15" step="0.1" /></label>
+            <label class="field"><span>IC-LoRA strength</span><input type="number" id="ltxIcLoraStrength" min="0" max="1" step="0.05" placeholder="1" /></label>
             <label class="field"><span>Negative prompt</span><textarea id="ltxNegative" rows="2"></textarea></label>
             <label class="field"><span>I2V strength</span><input type="number" id="ltxStrength" min="0" max="1" step="0.05" /></label>
-            <label class="field"><span><input type="checkbox" id="ltxRefine" /> Latent upscale refine (2-stage, LTX Studio)</span></label>
-            <label class="field"><span>Refine steps</span><input type="number" id="ltxRefineSteps" min="1" max="40" /></label>
-            <label class="field"><span>Refine denoise</span><input type="number" id="ltxRefineDenoise" min="0.05" max="1" step="0.05" /></label>
-            <label class="field"><span><input type="checkbox" id="ltxTiledDecode" /> Tiled VAE decode</span></label>
-            <label class="field" id="ltxPromptEnhanceField"><span><input type="checkbox" id="ltxPromptEnhance" /> Prompt enhance (LTX Studio LLM)</span></label>
+            <label class="field checkbox-field"><span><input type="checkbox" id="ltxTiledDecode" /> Tiled VAE decode</span></label>
+            <label class="field checkbox-field" id="ltxPromptEnhanceField"><span><input type="checkbox" id="ltxPromptEnhance" /> Prompt enhance (LTX Studio LLM)</span></label>
           </details>
           <p class="meta">Videos saved under <code>jobs/&lt;jobId&gt;/videos/</code> with audio track.</p>
           <div class="row">
@@ -315,9 +347,12 @@
         <div class="card">
           <h2>Job status</h2>
           <div id="dlBadge" class="badge idle">—</div>
+          <div class="stat" id="dlPercent">0%</div>
           <p class="meta" id="dlSummary">—</p>
           <p class="meta" id="dlCurrent">—</p>
-          <div class="progress"><span id="dlProgressBar" style="width:0%"></span></div>
+          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="dlProgress">
+            <span id="dlProgressBar" style="width:0%"></span>
+          </div>
           <p class="meta" id="dlProgressLabel">0% complete</p>
           <div class="row">
             <button id="startDownload">Start download (all)</button>
@@ -333,11 +368,41 @@
         <h2>All catalog files</h2>
         <table>
           <thead>
-            <tr><th>Status</th><th>Bundle</th><th>File</th><th>Size</th><th>Opt</th></tr>
+            <tr><th>Status</th><th>Bundle</th><th>File</th><th>Progress</th><th>Size</th><th>Opt</th></tr>
           </thead>
           <tbody id="filesBody"></tbody>
         </table>
       </section>
+    </section>
+
+    <!-- Cleanup -->
+    <section class="page" data-page="cleanup">
+      <div class="grid">
+        <div class="card">
+          <h2>Cleanup job</h2>
+          <div id="cuBadge" class="badge idle">—</div>
+          <div class="stat" id="cuBytes">—</div>
+          <p class="meta" id="cuSummary">Generated images and videos on the GPU box. Model weights are never deleted.</p>
+          <p class="meta" id="cuSkip">—</p>
+          <label class="field checkbox-field"><span><input type="checkbox" id="cuImages" checked /> Job images (<code>jobs/*/images</code>)</span></label>
+          <label class="field checkbox-field"><span><input type="checkbox" id="cuVideos" checked /> Job videos (<code>jobs/*/videos</code>)</span></label>
+          <label class="field checkbox-field"><span><input type="checkbox" id="cuComfy" /> ComfyUI output folders</span></label>
+          <div class="row">
+            <button class="danger" id="cuRun">Remove from GPU</button>
+            <button class="secondary" id="cuRefresh">Refresh</button>
+          </div>
+          <p class="meta" id="cuResult">—</p>
+        </div>
+        <div class="card">
+          <h2>On disk</h2>
+          <table>
+            <thead>
+              <tr><th>Target</th><th>Files</th><th>Size</th></tr>
+            </thead>
+            <tbody id="cuTargets"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- Runtime -->

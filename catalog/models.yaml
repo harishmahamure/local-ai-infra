@@ -124,6 +124,29 @@ models:
         path: split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors
         local: diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors
 
+  - id: qwen-image-layered
+    license: Apache-2.0
+    commercial: true
+    dest: comfyui
+    vram_gb: 22
+    family: qwen-image-layered
+    role: decompose
+    version: "1.0"
+    provider: Qwen
+    estimated_vram: 22
+    supported_operations: [image.layered]
+    runtime: comfyui
+    recommended_presets: [draft, balanced, master]
+    enabled: true
+    depends_on: [qwen-image-2512-fp8]
+    files:
+      - repo: Comfy-Org/Qwen-Image-Layered_ComfyUI
+        path: split_files/diffusion_models/qwen_image_layered_fp8mixed.safetensors
+        local: diffusion_models/qwen_image_layered_fp8mixed.safetensors
+      - repo: Comfy-Org/Qwen-Image-Layered_ComfyUI
+        path: split_files/vae/qwen_image_layered_vae.safetensors
+        local: vae/qwen_image_layered_vae.safetensors
+
   - id: chroma1-hd
     license: Apache-2.0
     commercial: true
@@ -279,37 +302,8 @@ models:
         path: text_encoders/gemma4_e2b_it_int8_convrot.safetensors
         local: text_encoders/gemma4_e2b_it_int8_convrot.safetensors
 
-  # Official LTX-2 camera-control LoRAs (work on LTX-2.5). ~2.2 GB each. One at a time.
-  # Download: ./bin/ai download ltx-camera-loras
-  - id: ltx-camera-loras
-    license: LTX-2-Community
-    commercial: true
-    dest: comfyui
-    vram_gb: 0
-    files:
-      - repo: Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-In
-        path: ltx-2-19b-lora-camera-control-dolly-in.safetensors
-        local: loras/ltx-2-19b-lora-camera-control-dolly-in.safetensors
-      - repo: Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Out
-        path: ltx-2-19b-lora-camera-control-dolly-out.safetensors
-        local: loras/ltx-2-19b-lora-camera-control-dolly-out.safetensors
-      - repo: Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Left
-        path: ltx-2-19b-lora-camera-control-dolly-left.safetensors
-        local: loras/ltx-2-19b-lora-camera-control-dolly-left.safetensors
-      - repo: Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Right
-        path: ltx-2-19b-lora-camera-control-dolly-right.safetensors
-        local: loras/ltx-2-19b-lora-camera-control-dolly-right.safetensors
-      - repo: Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Up
-        path: ltx-2-19b-lora-camera-control-jib-up.safetensors
-        local: loras/ltx-2-19b-lora-camera-control-jib-up.safetensors
-      - repo: Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Down
-        path: ltx-2-19b-lora-camera-control-jib-down.safetensors
-        local: loras/ltx-2-19b-lora-camera-control-jib-down.safetensors
-      - repo: Lightricks/LTX-2-19b-LoRA-Camera-Control-Static
-        path: ltx-2-19b-lora-camera-control-static.safetensors
-        local: loras/ltx-2-19b-lora-camera-control-static.safetensors
-
   # Official LTX-2.3 Union Control IC-LoRA (depth / canny / pose). Requires a reference video.
+  # LTX-2.3 22B IC-LoRAs are documented to run on LTX-2.5. LTX-2 19B camera/detailer adapters do not.
   # Download: ./bin/ai download ltx-iclora-union
   - id: ltx-iclora-union
     license: LTX-2-Community
@@ -321,23 +315,13 @@ models:
         path: ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors
         local: loras/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors
 
-  # Official LTX-2 Detailer IC-LoRA (video-to-video detail). Requires a reference video.
-  # Download: ./bin/ai download ltx-iclora-detailer
-  - id: ltx-iclora-detailer
-    license: LTX-2-Community
-    commercial: true
-    dest: comfyui
-    vram_gb: 2
-    files:
-      - repo: Lightricks/LTX-2-19b-IC-LoRA-Detailer
-        path: ltx-2-19b-ic-lora-detailer.safetensors
-        local: loras/ltx-2-19b-ic-lora-detailer.safetensors
-
   # Official LTX-2.3 LipDub IC-LoRA (image/video + uploaded audio).
   # Download: ./bin/ai download ltx-iclora-lipdub
   - id: ltx-iclora-lipdub
     license: LTX-2-Community
     commercial: true
+    gated: true
+    hf_repo: Lightricks/LTX-2.3-22b-IC-LoRA-LipDub
     dest: comfyui
     vram_gb: 3
     files:
@@ -350,6 +334,8 @@ models:
   - id: ltx-iclora-motion-track
     license: LTX-2-Community
     commercial: true
+    gated: true
+    hf_repo: Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control
     dest: comfyui
     vram_gb: 4
     files:

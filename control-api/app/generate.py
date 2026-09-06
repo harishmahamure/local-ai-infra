@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from . import comfy_client, config, job_progress, planner, presets, qwen_graph, runtime
+from .application import image_flows
 
 JOBS_PATH = Path(config.LOGS) / "generate-jobs.json"
 JOBS_ROOT = Path(config.LOGS) / "jobs"
@@ -209,6 +210,11 @@ def _normalize_items(
     fast_gen_mode: bool | None = None,
     steps: int | None = None,
     upscale: bool | None = None,
+    flow: str | None = None,
+    extra_images: list[str] | None = None,
+    control_type: str | None = None,
+    control_strength: float | None = None,
+    layers: int | None = None,
 ) -> list[dict[str, Any]]:
     """Build normalized job items from prompts[] or prompt+count shorthand."""
     if prompts:
@@ -224,7 +230,8 @@ def _normalize_items(
         for i, raw in enumerate(prompts):
             item_prompt = raw.get("prompt") or ""
             item_plan = raw.get("plan")
-            if not item_prompt and not item_plan:
+            item_flow = raw.get("flow") or flow
+            if not item_prompt and not item_plan and item_flow != "layered":
                 raise GenerateError(
                     "VALIDATION_ERROR",
                     f"prompts[{i}] requires prompt or plan",
@@ -239,12 +246,18 @@ def _normalize_items(
             item_fast = raw.get("fastGenMode", fast_gen_mode)
             if item_fast == "auto":
                 item_fast = None
+            item_images = [img for img in (raw.get("images") or extra_images or []) if img]
             items.append(
                 {
                     "index": i,
                     "prompt": item_prompt,
                     "imageField": raw.get("image"),
+                    "imageFields": item_images,
                     "explicitPlan": item_plan,
+                    "flow": item_flow,
+                    "controlType": raw.get("controlType", control_type),
+                    "controlStrength": raw.get("controlStrength", control_strength),
+                    "layers": raw.get("layers", layers),
                     "seed": raw.get("seed"),
                     "width": raw.get("width"),
                     "height": raw.get("height"),
@@ -259,10 +272,11 @@ def _normalize_items(
             )
         return items
 
-    if not prompt and not plan:
+    if not prompt and not plan and flow != "layered":
         raise GenerateError("VALIDATION_ERROR", "prompt, plan, or prompts is required", 422)
 
     batch_count = max(1, min(int(count), MAX_BATCH_COUNT))
+    extra = [img for img in (extra_images or []) if img]
     items = []
     for i in range(batch_count):
         item_seed = (int(seed) + i) if seed is not None else None
@@ -271,7 +285,12 @@ def _normalize_items(
                 "index": i,
                 "prompt": prompt,
                 "imageField": image,
+                "imageFields": extra,
                 "explicitPlan": plan,
+                "flow": flow,
+                "controlType": control_type,
+                "controlStrength": control_strength,
+                "layers": layers,
                 "seed": item_seed,
                 "width": width,
                 "height": height,
@@ -288,12 +307,12 @@ def _normalize_items(
 
 
 def _needs_llm_planning(items: list[dict[str, Any]]) -> bool:
-    return any(not it.get("explicitPlan") for it in items)
+    return any(not it.get("explicitPlan") and not it.get("flow") for it in items)
 
 
 def _items_need_vision_planning(items: list[dict[str, Any]]) -> bool:
     for item in items:
-        if item.get("explicitPlan"):
+        if item.get("explicitPlan") or item.get("flow"):
             continue
         if item.get("imageField"):
             return True
@@ -462,6 +481,26 @@ def _plan_item(item: dict[str, Any]) -> dict[str, Any]:
                 steps=steps_override,
             )
         plan = _apply_upscale_option(plan, upscale_override)
+    elif item.get("flow"):
+        extras = [f for f in (item.get("imageFields") or []) if f]
+        image_count = (1 if image_field else 0) + len(extras)
+        if image_field and extras and extras[0] == image_field:
+            image_count = len(extras)
+        try:
+            plan = image_flows.resolve_flow_plan(
+                str(item["flow"]),
+                prompt=prompt,
+                image_count=image_count,
+                control_type=item.get("controlType"),
+                control_strength=item.get("controlStrength"),
+                layers=item.get("layers"),
+                width=item.get("width"),
+                height=item.get("height"),
+                seed=item.get("seed"),
+                upscale=upscale_override,
+            )
+        except image_flows.FlowError as exc:
+            raise GenerateError("VALIDATION_ERROR", str(exc), 422) from exc
     else:
         plan = planner.plan(prompt=prompt, image_data_url=data_url, fast_gen=fast_gen is True)
         plan = _apply_generation_options(
@@ -471,6 +510,29 @@ def _plan_item(item: dict[str, Any]) -> dict[str, Any]:
         )
         plan = _apply_upscale_option(plan, upscale_override)
     return _apply_item_overrides(plan, item)
+
+
+def _item_image_fields(item: dict[str, Any]) -> list[str]:
+    fields: list[str] = []
+    primary = item.get("imageField")
+    extras = [f for f in (item.get("imageFields") or []) if f]
+    if primary:
+        fields.append(primary)
+    for extra in extras:
+        if extra not in fields:
+            fields.append(extra)
+    return fields
+
+
+def _ensure_layered_nodes() -> None:
+    missing = [name for name in qwen_graph.LAYERED_REQUIRED_NODES if not comfy_client.has_node(name)]
+    if missing:
+        raise GenerateError(
+            "WORKFLOW_INVALID",
+            "Qwen-Image-Layered nodes are missing on ComfyUI "
+            f"({', '.join(missing)}). Update primary ComfyUI to a release that includes layered nodes.",
+            409,
+        )
 
 
 def _persist_outputs(job_id: str, batch_index: int, history_entry: dict[str, Any]) -> list[dict[str, Any]]:
@@ -669,15 +731,32 @@ def _run_job(job_id: str) -> None:
 
             try:
                 plan_i = copy.deepcopy(item["plan"])
-                image_name = _resolve_image_name(item.get("imageField"))
-                if item.get("imageField") and not image_name:
+                image_fields = _item_image_fields(item)
+                image_names = [_resolve_image_name(field) for field in image_fields]
+                if any(field and not name for field, name in zip(image_fields, image_names)):
                     raise GenerateError(
                         "IMAGE_UPLOAD_FAILED",
                         "Reference image could not be uploaded to ComfyUI",
                         500,
                     )
+                uploaded = [name for name in image_names if name]
+                image_name = uploaded[0] if uploaded else None
                 plan_i["image_name"] = image_name
-                plan_i = _adjust_plan_for_comfy(plan_i, has_image=bool(image_name))
+                plan_i["image_names"] = uploaded
+                if plan_i.get("mode") == "layered":
+                    _ensure_layered_nodes()
+                if item.get("flow") == "control":
+                    if not image_name:
+                        raise GenerateError("VALIDATION_ERROR", "control requires a guide image", 422)
+                    plan_i = _adjust_plan_for_comfy(plan_i, has_image=True)
+                    if plan_i.get("mode") != "control":
+                        raise GenerateError(
+                            "WORKFLOW_INVALID",
+                            "Control preprocessor nodes are missing on ComfyUI",
+                            409,
+                        )
+                else:
+                    plan_i = _adjust_plan_for_comfy(plan_i, has_image=bool(image_name))
                 batch_images = _execute_comfy_batch(job_id, plan_i, item["index"], total)
                 item["images"] = batch_images
                 item["status"] = "completed"
@@ -720,6 +799,11 @@ def submit(
     fast_gen_mode: bool | None = None,
     steps: int | None = None,
     upscale: bool | None = None,
+    flow: str | None = None,
+    extra_images: list[str] | None = None,
+    control_type: str | None = None,
+    control_strength: float | None = None,
+    layers: int | None = None,
 ) -> dict[str, Any]:
     items = _normalize_items(
         prompts=prompts,
@@ -733,7 +817,21 @@ def submit(
         fast_gen_mode=fast_gen_mode,
         steps=steps,
         upscale=upscale,
+        flow=flow,
+        extra_images=extra_images,
+        control_type=control_type,
+        control_strength=control_strength,
+        layers=layers,
     )
+    for item in items:
+        if not item.get("flow") or item.get("explicitPlan"):
+            continue
+        try:
+            _plan_item(item)
+        except GenerateError:
+            raise
+        except image_flows.FlowError as exc:
+            raise GenerateError("VALIDATION_ERROR", str(exc), 422) from exc
 
     job_id = str(uuid.uuid4())
     _job_images_dir(job_id)
@@ -798,7 +896,11 @@ def get_capabilities() -> dict[str, Any]:
         ready = all(bmap.get(b, {}).get("status") == "complete" for b in bundles)
         preset_list.append({**p, "ready": ready})
 
-    modes = ["txt2img", "edit", "control", "bg_replace", "painterly", "upscale"]
+    modes = ["txt2img", "edit", "control", "bg_replace", "painterly", "upscale", "layered"]
+    flows = []
+    for spec in image_flows.flow_catalog():
+        ready = all(bmap.get(b, {}).get("status") == "complete" for b in spec["bundles"])
+        flows.append({**spec, "ready": ready})
     loras = [
         {"id": "lightning", "file": presets.LORA["lightning"], "bundle": "qwen-image-2512-lightning-lora"},
         {"id": "advertisement", "file": presets.LORA["advertisement"], "bundle": "qwen-lora-advertisement"},
@@ -812,6 +914,7 @@ def get_capabilities() -> dict[str, Any]:
 
     return {
         "modes": modes,
+        "flows": flows,
         "presets": preset_list,
         "loras": loras,
         "plannerProfileText": config.PLANNER_PROFILE_TEXT,

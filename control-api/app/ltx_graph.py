@@ -20,6 +20,8 @@ DEFAULT_VIDEO_CFG = 1.0
 DEFAULT_AUDIO_CFG = 1.0
 DEFAULT_REFINE_SEED = 42
 DEFAULT_FPS = 24.0
+MAX_DURATION_SECONDS = 30
+MAX_LENGTH = (MAX_DURATION_SECONDS * 30 // 8) * 8 + 1  # 897; 30s at 30 fps, 8k+1
 DEFAULT_SAMPLER = "euler_ancestral"
 DEFAULT_MAX_SHIFT = 2.05
 DEFAULT_BASE_SHIFT = 0.95
@@ -68,7 +70,7 @@ def sanitize_pixels(value: int, *, minimum: int = 256, maximum: int = 2048, alig
     return max(minimum, (v // align) * align)
 
 
-def sanitize_length(value: int, *, minimum: int = 17, maximum: int = 241) -> int:
+def sanitize_length(value: int, *, minimum: int = 17, maximum: int = MAX_LENGTH) -> int:
     """LTX video latents require length == 8k + 1."""
     v = max(minimum, min(maximum, int(value)))
     return ((v - 1) // 8) * 8 + 1

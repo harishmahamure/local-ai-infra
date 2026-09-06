@@ -11,11 +11,18 @@ sys.path.insert(0, str(ROOT))
 from app import ltx_graph, ltx_loras  # noqa: E402
 
 
+def test_duration_allows_30_seconds() -> None:
+    assert ltx_graph.MAX_DURATION_SECONDS == 30
+    assert ltx_graph.duration_to_length(30, 24) == 721
+    assert ltx_graph.duration_to_length(30, 30) == ltx_graph.MAX_LENGTH
+
+
 def test_camera_auto_from_prompt() -> None:
     d = ltx_loras.decide("slow dolly forward through the alley", camera_motion="auto")
     assert d["camera_motion"] == "dolly_in"
     assert d["camera_motion_source"] == "prompt"
-    assert d["loras"][0]["name"].endswith("dolly-in.safetensors")
+    assert d["loras"] == []
+    assert d["prompt_hint"] is None
     assert d["ic_enabled"] is False
     assert d["ic_skip"] == "reference video required" or d["ic_source"] in ("skipped", "none")
 
@@ -31,6 +38,8 @@ def test_camera_explicit_jib() -> None:
     d = ltx_loras.decide("a quiet room", camera_motion="jib_up")
     assert d["camera_motion"] == "jib_up"
     assert d["camera_motion_source"] == "override"
+    assert d["loras"] == []
+    assert d["prompt_hint"] == "jib up, camera rising"
 
 
 def test_ic_skipped_without_video() -> None:
@@ -51,17 +60,16 @@ def test_ic_union_pose_from_prompt() -> None:
     assert d["control_type"] == "pose"
 
 
-def test_detailer_from_flag() -> None:
+def test_legacy_detailer_falls_back_to_union() -> None:
     d = ltx_loras.decide(
         "a rainy street",
-        detailer=True,
+        ic_lora="detailer",
         has_reference_video=True,
     )
-    ids = [x["id"] for x in d["ic_loras"]]
-    assert "detailer" in ids
+    assert [x["id"] for x in d["ic_loras"]] == ["union"]
 
 
-def test_graph_camera_lora_only() -> None:
+def test_graph_optional_lora_loader() -> None:
     graph = ltx_graph.build_t2v(
         {
             "width": 704,
@@ -70,7 +78,7 @@ def test_graph_camera_lora_only() -> None:
             "prompt": "slow dolly forward",
             "loras": [
                 {
-                    "name": "ltx-2-19b-lora-camera-control-dolly-in.safetensors",
+                    "name": "example-style.safetensors",
                     "strength": 1.0,
                 }
             ],
@@ -85,7 +93,7 @@ def test_graph_camera_lora_only() -> None:
     assert guider["inputs"]["model"][0] != next(
         nid for nid, n in graph.items() if n["class_type"] == "UNETLoader"
     )
-    assert loader["inputs"]["lora_name"].endswith("dolly-in.safetensors")
+    assert loader["inputs"]["lora_name"] == "example-style.safetensors"
 
 
 def test_graph_no_lora_without_plan() -> None:
@@ -244,13 +252,14 @@ def test_graph_ic_union_depth() -> None:
 
 if __name__ == "__main__":
     checks = [
+        test_duration_allows_30_seconds,
         test_camera_auto_from_prompt,
         test_camera_none_overrides_prompt,
         test_camera_explicit_jib,
         test_ic_skipped_without_video,
         test_ic_union_pose_from_prompt,
-        test_detailer_from_flag,
-        test_graph_camera_lora_only,
+        test_legacy_detailer_falls_back_to_union,
+        test_graph_optional_lora_loader,
         test_graph_no_lora_without_plan,
         test_graph_i2v_refine_reinjects_start,
         test_graph_a2v_encodes_and_remuxes_audio,

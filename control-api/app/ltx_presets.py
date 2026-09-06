@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from . import ltx_graph
+
 
 @dataclass
 class LtxPreset:
@@ -210,7 +212,7 @@ LTX_SPEED_MODES: dict[str, dict[str, Any]] = {
 LTX_PARAMETER_RANGES = {
     "width": {"min": 256, "max": 2048, "align": 32},
     "height": {"min": 256, "max": 2048, "align": 32},
-    "length": {"min": 17, "max": 241, "align": "8k+1"},
+    "length": {"min": 17, "max": ltx_graph.MAX_LENGTH, "align": "8k+1"},
     "fps": {"min": 16.0, "max": 30.0},
     "steps": {"min": 1, "max": 60},
     "refine_steps": {"min": 1, "max": 40},
