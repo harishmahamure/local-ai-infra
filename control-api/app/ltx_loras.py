@@ -145,7 +145,7 @@ IC_LORAS: dict[str, dict[str, Any]] = {
     "lipdub": {
         "id": "lipdub",
         "label": "LipDub",
-        "file": "ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors",
+        "file": "ltx-2.3-22b-ic-lora-dubit-0.9.safetensors",
         "bundle": IC_LIPDUB_BUNDLE,
         "needs_video": False,
         "explicit_only": True,

@@ -23,6 +23,17 @@ def catalog():
     return load_catalogs(REPO / "catalog", commercial_mode=True)
 
 
+def test_resolve_audio_tts_narrator(catalog) -> None:
+    op = resolve_operation(catalog, "audio.tts")
+    preset = resolve_preset(catalog, op, "narrator_hindi")
+    wf = resolve_workflow(catalog, op, preset)
+    assert wf.id == "audio-tts"
+    assert wf.executor == "tts"
+    assert wf.builder == "tts_generate"
+    cleaned = validate_overrides({"speaking_rate": 1.2, "seed": 1}, wf)
+    assert cleaned["speaking_rate"] == 1.2
+
+
 def test_resolve_image_generate_master(catalog) -> None:
     op = resolve_operation(catalog, "image.generate")
     preset = resolve_preset(catalog, op, "character_master")

@@ -203,10 +203,27 @@ class EngineServices:
             items.append(op.public_dict(available=reason is None, reason=reason))
         return {"operations": items}
 
+    def get_operation(self, operation_id: str) -> dict[str, Any]:
+        op = self.catalog.operation(operation_id)
+        disk = self.model_runtime.disk_status()
+        reason = availability_reason(self.catalog, op, disk)
+        payload = op.public_dict(available=reason is None, reason=reason)
+        payload["workflow_ids"] = [wf.id for wf in self.catalog.workflows_for(op.id)]
+        return payload
+
     def list_capabilities(self) -> dict[str, Any]:
         disk = self.model_runtime.disk_status()
         caps: dict[str, Any] = {
-            "image": {"generate": False, "edit": False, "upscale": False, "control": [], "layered": False},
+            "image": {
+                "generate": False,
+                "edit": False,
+                "upscale": False,
+                "control": [],
+                "layered": False,
+                "mask": False,
+                "depth": False,
+                "inspect": False,
+            },
             "video": {
                 "text_to_video": False,
                 "image_to_video": False,
@@ -217,38 +234,45 @@ class EngineServices:
                 "interpolation": False,
                 "lipsync": False,
                 "motion_transfer": False,
+                "upscale": False,
+                "color_grade": False,
+                "extract_frame": False,
+                "inspect": False,
+                "mask": False,
             },
-            "audio": {"tts": [], "music": False, "sfx": False, "ambience": False, "mix": False},
+            "audio": {
+                "tts": [],
+                "music": False,
+                "sfx": False,
+                "ambience": False,
+                "foley": False,
+                "mix": False,
+                "normalize": False,
+                "inspect": False,
+            },
+            "media": {"concat": False, "finalize": False},
+            "qc": {"image": False, "video": False, "audio": False, "media": False},
             "text": {"chat": False, "vision": False},
         }
         for op in self.catalog.operations.values():
             if availability_reason(self.catalog, op, disk) is not None:
                 continue
-            if op.id == "image.generate":
-                caps["image"]["generate"] = True
-            elif op.id == "image.edit":
-                caps["image"]["edit"] = True
-            elif op.id == "image.controlled":
+            if op.id == "image.controlled":
                 caps["image"]["control"] = ["pose", "depth", "canny"]
-            elif op.id == "image.layered":
-                caps["image"]["layered"] = True
-            elif op.id == "image.upscale":
-                caps["image"]["upscale"] = True
-            elif op.id == "video.generate":
-                caps["video"]["text_to_video"] = True
-            elif op.id == "video.image_to_video":
-                caps["video"]["image_to_video"] = True
-            elif op.id == "video.audio_to_video":
-                caps["video"]["audio_to_video"] = True
-            elif op.id == "video.first_last_frames":
-                caps["video"]["first_last_frames"] = True
-            elif op.id == "video.lipsync":
-                caps["video"]["lipsync"] = True
-            elif op.id == "video.motion_transfer":
-                caps["video"]["motion_transfer"] = True
-            elif op.id == "text.chat":
+                continue
+            if op.id == "audio.tts":
+                caps["audio"]["tts"] = list(op.presets)
+                continue
+            if op.id == "text.chat":
                 caps["text"]["chat"] = True
                 caps["text"]["vision"] = True
+                continue
+            if len(op.capability_path) < 2:
+                continue
+            section, key = op.capability_path[0], op.capability_path[1]
+            bucket = caps.get(section)
+            if isinstance(bucket, dict) and key in bucket and isinstance(bucket[key], bool):
+                bucket[key] = True
         return caps
 
     def list_presets(self) -> dict[str, Any]:
@@ -545,9 +569,43 @@ def _validate_inputs(operation: str, inputs: dict[str, Any], _max_upload: int) -
             raise DomainError(ErrorCode.INVALID_REQUEST, "prompt is required")
         if not (isinstance(inputs.get("reference_video"), dict) and inputs["reference_video"].get("asset_id")):
             raise DomainError(ErrorCode.INVALID_REQUEST, "reference_video.asset_id is required")
+    if operation == "audio.tts":
+        if not str(inputs.get("text") or "").strip():
+            raise DomainError(ErrorCode.INVALID_REQUEST, "text is required")
+        language = inputs.get("language")
+        if language is not None and str(language) not in {"hi", "en"}:
+            raise DomainError(ErrorCode.INVALID_PARAMETER, "language must be hi or en")
+    if operation in {"audio.music", "audio.sfx", "audio.ambience", "audio.foley"}:
+        if not str(inputs.get("prompt") or "").strip():
+            raise DomainError(ErrorCode.INVALID_REQUEST, "prompt is required")
+    if operation == "audio.mix":
+        stems = inputs.get("stems")
+        if not isinstance(stems, list) or not stems:
+            raise DomainError(ErrorCode.INVALID_REQUEST, "stems are required")
+        for index, stem in enumerate(stems):
+            if not (isinstance(stem, dict) and stem.get("asset_id") and stem.get("role")):
+                raise DomainError(ErrorCode.INVALID_REQUEST, f"stems[{index}] needs asset_id and role")
+    if operation in {"audio.normalize", "audio.inspect"}:
+        if not (isinstance(inputs.get("audio"), dict) and inputs["audio"].get("asset_id")):
+            raise DomainError(ErrorCode.INVALID_REQUEST, "audio.asset_id is required")
+    if operation == "media.concat":
+        clips = inputs.get("clips")
+        if not isinstance(clips, list) or len(clips) < 2:
+            raise DomainError(ErrorCode.INVALID_REQUEST, "clips must contain at least 2 items")
+        for index, clip in enumerate(clips):
+            if not (isinstance(clip, dict) and clip.get("asset_id")):
+                raise DomainError(ErrorCode.INVALID_REQUEST, f"clips[{index}].asset_id is required")
+    if operation == "media.finalize":
+        if not (isinstance(inputs.get("video"), dict) and inputs["video"].get("asset_id")):
+            raise DomainError(ErrorCode.INVALID_REQUEST, "video.asset_id is required")
     count = inputs.get("candidate_count")
     if count is not None and (int(count) < 1 or int(count) > 8):
         raise DomainError(ErrorCode.INVALID_PARAMETER, "candidate_count must be 1-8")
     duration = inputs.get("duration_seconds")
-    if duration is not None and (float(duration) < 1 or float(duration) > 30):
-        raise DomainError(ErrorCode.INVALID_PARAMETER, "duration_seconds must be 1-30")
+    if duration is not None:
+        value = float(duration)
+        if operation in {"audio.music", "audio.sfx", "audio.ambience", "audio.foley", "audio.mix"}:
+            if value < 0.25 or value > 180:
+                raise DomainError(ErrorCode.INVALID_PARAMETER, "duration_seconds must be 0.25-180")
+        elif value < 1 or value > 30:
+            raise DomainError(ErrorCode.INVALID_PARAMETER, "duration_seconds must be 1-30")

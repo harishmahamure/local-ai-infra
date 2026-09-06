@@ -108,9 +108,21 @@ def retry_job(job_id: str, body: RetryJobRequest, request: Request):
         return domain_error_response(exc, request)
 
 
-@router.get("/v1/operations", summary="List operations", description="Catalog operations with available flags and input schemas.")
+@router.get("/v1/operations", summary="List operations", description="Catalog operations with implemented/available flags and input schemas.")
 def list_operations(request: Request):
     return _ok(_svc(request).list_operations())
+
+
+@router.get(
+    "/v1/operations/{operation_id}",
+    summary="Get one operation contract",
+    description="Full input/output schema, implemented flag, availability reason, required models, and workflow ids.",
+)
+def get_operation(operation_id: str, request: Request):
+    try:
+        return _ok(_svc(request).get_operation(operation_id))
+    except DomainError as exc:
+        return domain_error_response(exc, request)
 
 
 @router.get("/v1/capabilities", summary="Engine capabilities")

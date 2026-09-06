@@ -82,14 +82,31 @@ Default TTL is 24 hours. This engine is not the permanent DAM.
 }
 ```
 
-## Phase 1 executable operations
+## Phase 1 + Phase A executable operations
 
-- `image.generate` — Qwen; no planner
+- `image.generate` / `image.edit` / `image.controlled` / `image.layered` — Qwen; no planner
 - `image.upscale` — RealESRGAN
 - `video.generate` / `video.image_to_video` / `video.audio_to_video` / `video.first_last_frames` / `video.lipsync` / `video.motion_transfer` — LTX-2.5; no auto camera LoRA
+- `audio.tts` — Chatterbox (MIT); profile `tts` is stop-only, in-process CUDA
+- `audio.music` / `audio.sfx` / `audio.ambience` / `audio.foley` — ACE-Step 1.5 (Apache) on Comfy
+- `audio.mix` / `audio.normalize` / `audio.inspect` — FFmpeg / ffprobe; no GPU profile
+- `media.concat` / `media.finalize` — FFmpeg concat + H.264/AAC mux
 - `text.chat` — sync/SSE via `POST /v1/text/chat` (Gemma or Qwen3.6); not a Comfy job
 
-`video.lipsync` needs `ltx-iclora-lipdub`. `video.motion_transfer` needs `ltx-iclora-motion-track`. Other operations stay discoverable but `available: false`.
+`video.lipsync` needs `ltx-iclora-lipdub`. `video.motion_transfer` needs `ltx-iclora-motion-track`.
+`audio.tts` needs `chatterbox-multilingual` + `chatterbox-hi`. ACE-Step ops need `ace-step-1.5`.
+
+## Discoverable but not executable
+
+`GET /v1/operations` lists the full movie-production inventory. Each item has
+`implemented`, `available`, `reason`, and non-empty `input_schema` /
+`output_schema`. `GET /v1/operations/{id}` also returns `workflow_ids`.
+
+Contract-only (submit → `UNSUPPORTED_OPERATION`): `video.continue` / `enhance` /
+`upscale` / `interpolate` / `color_grade` / `extract_frame` / `inspect` /
+`mask`, `image.mask` / `depth` / `inspect`, `qc.*`.
+
+See [movie-production-ops.md](movie-production-ops.md).
 
 ## Text models
 

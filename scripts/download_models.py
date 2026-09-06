@@ -43,6 +43,7 @@ def _safe_models_root(env_name: str, default: str) -> Path:
 
 COMFY_ROOT = _safe_models_root("COMFYUI_ROOT", "~/ComfyUI/models")
 LLAMA_ROOT = _safe_models_root("LLAMACPP_MODELS", "~/ai-inference/models/llamacpp")
+CHATTERBOX_ROOT = _safe_models_root("CHATTERBOX_MODELS", "~/ai-inference/models/chatterbox")
 INSTALLED = Path(os.environ.get("INSTALLED_JSON", ROOT / "catalog" / "installed.json"))
 DOWNLOAD_STATE = Path(
     os.environ.get("DOWNLOAD_STATE", os.path.expanduser("~/ai-inference/logs/download-state.json"))
@@ -108,7 +109,11 @@ def load_catalog() -> dict:
 
 
 def dest_root(dest: str) -> Path:
-    return COMFY_ROOT if dest == "comfyui" else LLAMA_ROOT
+    if dest == "comfyui":
+        return COMFY_ROOT
+    if dest == "chatterbox":
+        return CHATTERBOX_ROOT
+    return LLAMA_ROOT
 
 
 def sha256_file(path: Path) -> str:
@@ -123,8 +128,19 @@ def _gated_hint(repo: str) -> str:
     return (
         f"Gated HuggingFace repo {repo}: accept the license at "
         f"https://huggingface.co/{repo} then set HF_TOKEN in Mac .env and run "
-        f"`./bin/ai download ltx-2.5-distilled` (syncs token to GPU)."
+        f"`./bin/ai download` for that bundle (syncs token to GPU)."
     )
+
+
+def _http_download_error(repo: str, remote_path: str, exc: Exception, *, gated: bool) -> Exception:
+    code = getattr(getattr(exc, "response", None), "status_code", None)
+    if code in (401, 403):
+        return RuntimeError(_gated_hint(repo))
+    if code == 404:
+        return RuntimeError(f"HuggingFace file not found: {repo}/{remote_path}")
+    if gated and code is None:
+        return RuntimeError(_gated_hint(repo))
+    return exc if isinstance(exc, Exception) else RuntimeError(str(exc))
 
 
 def _require_token(model: dict, token: str | None) -> None:
@@ -164,10 +180,10 @@ def download_file(
     except GatedRepoError:
         raise RuntimeError(_gated_hint(repo)) from None
     except HfHubHTTPError as exc:
-        code = getattr(getattr(exc, "response", None), "status_code", None)
-        if code in (401, 403) or gated:
-            raise RuntimeError(_gated_hint(repo)) from exc
-        raise
+        mapped = _http_download_error(repo, remote_path, exc, gated=gated)
+        if mapped is exc:
+            raise
+        raise mapped from exc
     shutil.copy2(cached, local_path)
     if os.environ.get("DOWNLOAD_PRUNE_CACHE") == "1":
         try:

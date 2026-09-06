@@ -37,7 +37,8 @@ class ProfileResourceScheduler:
             self._active_job = job_id
         if requirement.gpu_required:
             self._ensure_profile(profile)
-            self._check_vram(requirement.estimated_vram_gb)
+            if profile != "tts":
+                self._check_vram(requirement.estimated_vram_gb)
         self._loaded_profile = profile
         self._estimated_vram = requirement.estimated_vram_gb
         return ResourceLease(job_id=job_id, profile=profile, estimated_vram_gb=requirement.estimated_vram_gb)
@@ -76,6 +77,12 @@ class ProfileResourceScheduler:
         except Exception as exc:
             raise DomainError(ErrorCode.COMFYUI_UNAVAILABLE, str(exc)) from exc
         current = str(status.get("profile") or "none")
+        if profile == "tts":
+            try:
+                self._runtime.start_profile("tts")
+            except Exception as exc:
+                raise DomainError(ErrorCode.COMFYUI_UNAVAILABLE, str(exc)) from exc
+            return
         unit = "comfyui" if profile == "comfy" else "comfyui-ltx" if profile == "comfy-ltx" else profile
         if current == unit and status.get("loadState") == "LOADED":
             return

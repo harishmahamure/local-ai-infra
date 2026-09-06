@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "catalog" / "models.yaml"
 COMFY_ROOT = Path(os.environ.get("COMFYUI_ROOT", os.path.expanduser("~/ComfyUI/models")))
 LLAMA_ROOT = Path(os.environ.get("LLAMACPP_MODELS", os.path.expanduser("~/ai-inference/models/llamacpp")))
+CHATTERBOX_ROOT = Path(os.environ.get("CHATTERBOX_MODELS", os.path.expanduser("~/ai-inference/models/chatterbox")))
 INSTALLED = Path(os.environ.get("INSTALLED_JSON", ROOT / "catalog" / "installed.json"))
 
 
@@ -42,7 +43,11 @@ def file_state(path: Path) -> dict:
 
 
 def dest_root(dest: str) -> Path:
-    return COMFY_ROOT if dest == "comfyui" else LLAMA_ROOT
+    if dest == "comfyui":
+        return COMFY_ROOT
+    if dest == "chatterbox":
+        return CHATTERBOX_ROOT
+    return LLAMA_ROOT
 
 
 def bundle_status(model: dict) -> dict:

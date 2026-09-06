@@ -71,6 +71,16 @@ All entries in `models.yaml` are Apache-2.0 or MIT and `commercial: true`, excep
 | `ltx-iclora-lipdub` | LTX-2.3 22B LipDub IC-LoRA | LTX-2-Community | Image/keyframe + uploaded-audio lip sync |
 | `ltx-iclora-motion-track` | LTX-2.3 22B Motion Track IC-LoRA | LTX-2-Community | Motion transfer from a reference video |
 
+### Speech + music (Phase A)
+
+| Bundle | Family | License | Use for |
+|--------|--------|---------|---------|
+| `chatterbox-multilingual` | Chatterbox Multilingual V3 | MIT | `audio.tts` (en + multilingual) |
+| `chatterbox-hi` | Chatterbox Hindi pack | MIT | Hindi narration / dialogue quality |
+| `ace-step-1.5` | ACE-Step 1.5 turbo (Comfy-Org split) | Apache-2.0 | `audio.music` / `sfx` / `ambience` / prompt-foley |
+
+Do **not** add Stable Audio Open or MusicGen NC.
+
 ### LLM profiles
 
 | Bundle | Role | License |

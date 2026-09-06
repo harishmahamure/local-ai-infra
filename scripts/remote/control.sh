@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GPU box lifecycle: exactly one active profile (llama-fast | gemma | comfy | comfy-ltx).
+# GPU box lifecycle: exactly one active profile (llama-fast | gemma | comfy | comfy-ltx | tts).
 set -euo pipefail
 
 LAN_IP="${LAN_BIND_IP:-192.168.50.100}"
@@ -13,7 +13,7 @@ UNITS=(llama-fast gemma comfyui comfyui-ltx)
 
 usage() {
   cat <<EOF
-Usage: control.sh <status|start|stop|switch|models> [llama-fast|gemma|comfy|comfy-ltx]
+Usage: control.sh <status|start|stop|switch|models> [llama-fast|gemma|comfy|comfy-ltx|tts]
 EOF
   exit 1
 }
@@ -255,7 +255,7 @@ cmd_start() {
   local target="${1:-}"
   [[ -n "$target" ]] || usage
   case "$target" in
-    llama-fast|gemma|comfy|comfy-ltx) ;;
+    llama-fast|gemma|comfy|comfy-ltx|tts) ;;
     comfyui) target="comfy" ;;
     comfyui-ltx) target="comfy-ltx" ;;
     *) echo "Unknown profile: $target" >&2; exit 1 ;;
@@ -263,6 +263,10 @@ cmd_start() {
 
   echo "Stopping other GPU profiles (exclusive: one model)..."
   stop_all
+  if [[ "$target" == "tts" ]]; then
+    echo "Ready (LOADED): TTS — GPU idle for in-process Chatterbox"
+    return
+  fi
   local unit="$target"
   [[ "$target" == "comfy" ]] && unit="comfyui"
   [[ "$target" == "comfy-ltx" ]] && unit="comfyui-ltx"

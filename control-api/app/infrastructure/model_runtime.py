@@ -70,6 +70,8 @@ class CatalogModelRuntime:
         if model_id in LTX_MODELS:
             return "comfy-ltx"
         model = self._catalog.models[model_id]
+        if model.dest == "chatterbox" or model.runtime == "tts":
+            return "tts"
         if model.dest == "llamacpp":
             return profile_for_text_model(model_id)
         if model_id.startswith("gemma"):

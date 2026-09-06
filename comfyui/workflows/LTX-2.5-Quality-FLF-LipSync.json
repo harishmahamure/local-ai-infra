@@ -149,7 +149,7 @@
           "13",
           0
         ],
-        "lora_name": "ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors",
+        "lora_name": "ltx-2.3-22b-ic-lora-dubit-0.9.safetensors",
         "strength_model": 1.0
       }
     },

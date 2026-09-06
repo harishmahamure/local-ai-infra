@@ -54,10 +54,22 @@ Union needs a reference video. LipDub is explicit on lip-sync ops (start image +
 | Bundle | ID | File |
 |--------|----|------|
 | `ltx-iclora-union` | `union` | `ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors` (depth / canny / pose) |
-| `ltx-iclora-lipdub` | `lipdub` | `ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors` |
+| `ltx-iclora-lipdub` | `lipdub` | `ltx-2.3-22b-ic-lora-dubit-0.9.safetensors` |
 | `ltx-iclora-motion-track` | `motion_track` | `ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors` |
 
 Studio optional: `loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors` (do not use on distilled).
+
+## Speech + music
+
+| Bundle | Role | VRAM | License | Local files |
+|--------|------|------|---------|-------------|
+| `chatterbox-multilingual` | TTS (Chatterbox V3) | 4 GB | MIT | `~/ai-inference/models/chatterbox/` — `t3_mtl23ls_v3.safetensors`, `s3gen_v3.safetensors`, `ve.safetensors`, tokenizer JSON |
+| `chatterbox-hi` | Hindi TTS pack | 0 | MIT | `t3_hi.safetensors` (depends on multilingual) |
+| `ace-step-1.5` | Music / SFX / ambience | 8 GB | Apache-2.0 | `diffusion_models/acestep_v1.5_turbo.safetensors`, `text_encoders/qwen_1.7b_ace15.safetensors`, `vae/ace_1.5_vae.safetensors` |
+
+```bash
+./bin/ai download chatterbox-multilingual chatterbox-hi ace-step-1.5
+```
 
 ## LLM models (llama.cpp)
 
@@ -68,7 +80,7 @@ Studio optional: `loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors` (do not
 
 ## Counts (Wan excluded)
 
-- **21** catalog bundles: 9 image/video/utility (6 image/control/upscale + 3 LTX cores) + 7 Qwen LoRAs + 3 LTX-2.3 IC-LoRA bundles + 2 llama.cpp LLMs
+- **24** catalog bundles: previous 21 + `chatterbox-multilingual`, `chatterbox-hi`, `ace-step-1.5`
 - **3** LTX-2.3 IC-LoRA files (union, lipdub, motion-track)
 - Omitted: `wan2.2-i2v-fp8`, `wan2.2-t2v-fp8`; LTX-2 19B camera/detailer adapters
 
@@ -113,7 +125,7 @@ The GPU control catalog (`~/ai-inference/control/catalog/models.yaml`) can lag t
 | `qwen36-35b-a3b-rq` | `Qwen3.6-35B-A3B-Q4_K_M.gguf`, `Qwen3.6-35B-A3B-mmproj-F16.gguf` |
 | `ltx-2.5-prompt-enhancer` | `text_encoders/gemma4_e2b_it_int8_convrot.safetensors` |
 | `ltx-iclora-union` | `loras/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors` |
-| `ltx-iclora-lipdub` | `loras/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors` |
+| `ltx-iclora-lipdub` | `loras/ltx-2.3-22b-ic-lora-dubit-0.9.safetensors` |
 | `ltx-iclora-motion-track` | `loras/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors` |
 
 Studio optionals also missing (not required): `ltx-2.5-duration-head-bf16.safetensors`, `ltx-2.5-latent-temporal-upscaler-x2-bf16-1.0.safetensors`, `ltx-2.5-22b-distilled-lora-450-bf16.safetensors` (do not apply the distilled LoRA on the distilled transformer).

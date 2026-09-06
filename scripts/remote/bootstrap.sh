@@ -11,7 +11,7 @@ LAN_IP="${LAN_BIND_IP:-192.168.50.100}"
 VENV="${AI_VENV:-$HOME/ai-inference/venv}"
 
 echo "=== bootstrap ai-inference ==="
-mkdir -p "$HOME/ai-inference"/{models/llamacpp,logs,control,rotorquant}
+mkdir -p "$HOME/ai-inference"/{models/llamacpp,models/chatterbox,logs,control,rotorquant}
 mkdir -p "$COMFYUI_HOME/models"/{diffusion_models,text_encoders,vae,loras,controlnet,model_patches,checkpoints,latent_upscale_models,Kokorotts}
 
 # Python venv for downloads
@@ -29,17 +29,17 @@ if [[ -d /usr/local/cuda/bin ]]; then
 fi
 
 need_pkgs=()
-for bin in gcc g++ cmake git; do
+for bin in gcc g++ cmake git ffmpeg ffprobe; do
   command -v "$bin" >/dev/null || need_pkgs+=("$bin")
 done
 if ((${#need_pkgs[@]} > 0)); then
-  echo "Missing build tools: ${need_pkgs[*]}"
+  echo "Missing tools: ${need_pkgs[*]}"
   if sudo -n true 2>/dev/null; then
     sudo apt-get update
-    sudo apt-get install -y build-essential cmake git libcurl4-openssl-dev pciutils
+    sudo apt-get install -y build-essential cmake git libcurl4-openssl-dev pciutils ffmpeg
   else
     echo "Install once on the GPU box (needs your sudo password):" >&2
-    echo "  sudo apt-get update && sudo apt-get install -y build-essential cmake git libcurl4-openssl-dev pciutils" >&2
+    echo "  sudo apt-get update && sudo apt-get install -y build-essential cmake git libcurl4-openssl-dev pciutils ffmpeg" >&2
     exit 1
   fi
 fi

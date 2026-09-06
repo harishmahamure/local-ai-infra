@@ -20,6 +20,8 @@ ALLOWED_OVERRIDES = {
     "loras",
     "negative_prompt",
     "aspect_ratio",
+    "speaking_rate",
+    "target_lufs",
 }
 
 ASPECT_PIXELS: dict[str, tuple[int, int]] = {

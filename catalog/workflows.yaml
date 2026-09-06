@@ -232,3 +232,395 @@ workflows:
       prompt: {key: prompt}
       seed: {key: seed}
       reference_video: {key: video_name}
+
+  - id: audio-tts
+    version: v1
+    operation: audio.tts
+    description: Chatterbox multilingual TTS (Hindi / English)
+    executor: tts
+    builder: tts_generate
+    required_models: [chatterbox-multilingual, chatterbox-hi]
+    supported_presets: [draft, master, narrator_hindi, dialogue_hindi]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 4
+      profile: tts
+      timeout_class: cpu
+      gpu_required: true
+
+  - id: audio-music
+    version: v1
+    operation: audio.music
+    description: ACE-Step 1.5 instrumental / score
+    executor: comfyui
+    builder: ace_step_music
+    required_models: [ace-step-1.5]
+    supported_presets: [draft, balanced, master, cinematic_master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 8
+      profile: comfy
+      timeout_class: music
+      gpu_required: true
+
+  - id: audio-sfx
+    version: v1
+    operation: audio.sfx
+    description: ACE-Step 1.5 isolated SFX
+    executor: comfyui
+    builder: ace_step_sfx
+    required_models: [ace-step-1.5]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 8
+      profile: comfy
+      timeout_class: music
+      gpu_required: true
+
+  - id: audio-ambience
+    version: v1
+    operation: audio.ambience
+    description: ACE-Step 1.5 ambience stem
+    executor: comfyui
+    builder: ace_step_ambience
+    required_models: [ace-step-1.5]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 8
+      profile: comfy
+      timeout_class: music
+      gpu_required: true
+
+  - id: audio-foley
+    version: v1
+    operation: audio.foley
+    description: ACE-Step 1.5 prompt-only foley (video timed foley is later)
+    executor: comfyui
+    builder: ace_step_foley
+    required_models: [ace-step-1.5]
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 8
+      profile: comfy
+      timeout_class: music
+      gpu_required: true
+
+  - id: audio-mix
+    version: v1
+    operation: audio.mix
+    description: FFmpeg stem mix with LUFS normalize
+    executor: ffmpeg
+    builder: ffmpeg_mix
+    required_models: []
+    supported_presets: [draft, balanced, master, cinematic]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 0
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: audio-normalize
+    version: v1
+    operation: audio.normalize
+    description: FFmpeg loudness / true-peak normalize
+    executor: ffmpeg
+    builder: ffmpeg_normalize
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 0
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: audio-inspect
+    version: v1
+    operation: audio.inspect
+    description: ffprobe audio metadata
+    executor: ffmpeg
+    builder: ffmpeg_inspect
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 0
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: media-concat
+    version: v1
+    operation: media.concat
+    description: FFmpeg concatenate clips
+    executor: ffmpeg
+    builder: ffmpeg_concat
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 0
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: media-finalize
+    version: v1
+    operation: media.finalize
+    description: FFmpeg mux video + audio to H.264/AAC mp4
+    executor: ffmpeg
+    builder: ffmpeg_finalize
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 0
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: video-continue
+    version: v1
+    operation: video.continue
+    description: Connected next shot (contract only)
+    executor: comfyui
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 28
+      profile: comfy-ltx
+      timeout_class: video
+
+  - id: video-enhance
+    version: v1
+    operation: video.enhance
+    description: Restore / denoise video (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 16
+      profile: none
+      timeout_class: enhancement
+
+  - id: video-upscale
+    version: v1
+    operation: video.upscale
+    description: Generative video upscale (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 16
+      profile: none
+      timeout_class: enhancement
+
+  - id: video-interpolate
+    version: v1
+    operation: video.interpolate
+    description: Frame interpolation (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 8
+      profile: none
+      timeout_class: enhancement
+
+  - id: video-color-grade
+    version: v1
+    operation: video.color_grade
+    description: Color grade look pass (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 8
+      profile: none
+      timeout_class: enhancement
+
+  - id: video-extract-frame
+    version: v1
+    operation: video.extract_frame
+    description: Extract a still from a clip (contract only)
+    executor: ffmpeg
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 0
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: video-inspect
+    version: v1
+    operation: video.inspect
+    description: Video metadata (contract only)
+    executor: ffmpeg
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 0
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: video-mask
+    version: v1
+    operation: video.mask
+    description: Video mask / tracking (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 8
+      profile: none
+      timeout_class: video
+
+  - id: image-mask
+    version: v1
+    operation: image.mask
+    description: SAM mask (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: true
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 4
+      profile: none
+      timeout_class: image
+
+  - id: image-depth
+    version: v1
+    operation: image.depth
+    description: Depth map (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 4
+      profile: none
+      timeout_class: image
+
+  - id: image-inspect
+    version: v1
+    operation: image.inspect
+    description: Image metadata (contract only)
+    executor: ffmpeg
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 0
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: qc-image
+    version: v1
+    operation: qc.image
+    description: Image QC (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 4
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: qc-video
+    version: v1
+    operation: qc.video
+    description: Video QC (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 4
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: qc-audio
+    version: v1
+    operation: qc.audio
+    description: Audio QC (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 0
+      profile: none
+      timeout_class: cpu
+      gpu_required: false
+
+  - id: qc-media
+    version: v1
+    operation: qc.media
+    description: Combined media QC (contract only)
+    executor: none
+    builder: ""
+    required_models: []
+    supported_presets: [draft, balanced, master]
+    supports_seed: false
+    supports_cancel: true
+    resource:
+      estimated_vram_gb: 4
+      profile: none
+      timeout_class: cpu
+      gpu_required: false

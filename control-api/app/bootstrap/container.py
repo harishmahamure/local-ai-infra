@@ -8,6 +8,9 @@ from ..application.services import EngineServices
 from ..infrastructure.catalogs import load_catalogs
 from ..infrastructure.clock import SystemClock, UlidGenerator
 from ..infrastructure.comfyui.executor import ComfyUIExecutor
+from ..infrastructure.ffmpeg.executor import FfmpegExecutor
+from ..infrastructure.routing import RoutingExecutor
+from ..infrastructure.tts.executor import TtsExecutor
 from ..infrastructure.events import InProcessEventPublisher
 from ..infrastructure.gpu import ProfileResourceScheduler
 from ..infrastructure.inspect import BasicMediaInspector
@@ -57,7 +60,13 @@ def build_engine(
         idempotency = SqliteIdempotencyRepository(store)
         events = InProcessEventPublisher(store=SqliteEventStore(store), clock=clock)
 
-    exec_impl = executor or ComfyUIExecutor()
+    exec_impl = executor or RoutingExecutor(
+        {
+            "comfyui": ComfyUIExecutor(),
+            "tts": TtsExecutor(),
+            "ffmpeg": FfmpegExecutor(),
+        }
+    )
     sched = scheduler or ProfileResourceScheduler(runtime, interrupt_fn=exec_impl.cancel)
     runtime_impl = model_runtime or CatalogModelRuntime(catalog, runtime, downloads)
     dl = downloader or SystemdModelDownloader(downloads)

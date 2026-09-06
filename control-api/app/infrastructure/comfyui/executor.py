@@ -5,7 +5,7 @@ import time
 import uuid
 from typing import Any
 
-from ... import comfy_client, ltx_graph, qwen_graph
+from ... import ace_step_graph, comfy_client, ltx_graph, qwen_graph
 from ...application.ports import ExecutionOutput, ExecutionRequest, ExecutionResult
 from ...domain.errors import DomainError, ErrorCode
 from .plans import build_plan
@@ -14,7 +14,7 @@ from .plans import build_plan
 def _collect_files(outputs: dict[str, Any]) -> list[dict[str, str]]:
     files: list[dict[str, str]] = []
     for out in outputs.values():
-        for key in ("images", "gifs", "videos"):
+        for key in ("images", "gifs", "videos", "audio", "audios"):
             for item in out.get(key) or []:
                 filename = item.get("filename")
                 if filename:
@@ -96,7 +96,10 @@ class ComfyUIExecutor:
         model_ids = list(workflow.required_models)
         if workflow.builder.startswith("ltx_") and plan.get("refine"):
             model_ids.append("ltx-2.5-studio")
-        return ExecutionResult(outputs=outputs, model_ids=model_ids, seed=seed0, duration_ms=elapsed, extra={"plan": plan})
+        extra: dict[str, Any] = {"plan": plan}
+        if plan.get("video_ignored"):
+            extra["warnings"] = ["audio.foley is prompt-only in Phase A; video input was ignored"]
+        return ExecutionResult(outputs=outputs, model_ids=model_ids, seed=seed0, duration_ms=elapsed, extra=extra)
 
     def _build_graph(self, builder: str, plan: dict[str, Any]) -> dict[str, Any]:
         if builder == "qwen_txt2img":
@@ -116,6 +119,8 @@ class ComfyUIExecutor:
             return qwen_graph.build_layered(plan)
         if builder == "qwen_upscale":
             return qwen_graph.build_upscale(plan)
+        if builder.startswith("ace_step"):
+            return ace_step_graph.build(plan)
         if builder.startswith("ltx_"):
             mode = {
                 "ltx_t2v": "t2v",
@@ -228,6 +233,11 @@ class ComfyUIExecutor:
         outputs: list[ExecutionOutput] = []
         for item in files:
             raw, mime = client.fetch_media(item["filename"], item["subfolder"], item["folder_type"])
-            kind = "VIDEO" if mime.startswith("video/") else "IMAGE"
+            if mime.startswith("video/"):
+                kind = "VIDEO"
+            elif mime.startswith("audio/"):
+                kind = "AUDIO"
+            else:
+                kind = "IMAGE"
             outputs.append(ExecutionOutput(data=raw, mime_type=mime, artifact_type=kind))
         return outputs

@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
 from app.downloads import _build_progress, _hf_incomplete_bytes
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts"))
+from download_models import _http_download_error  # noqa: E402
 
 
 def _models(*files: dict) -> dict:
@@ -72,6 +81,13 @@ def test_failed_file_uses_state_error() -> None:
     row = progress["files"][0]
     assert row["state"] == "failed"
     assert "Gated" in row["error"]
+
+
+def test_http_404_is_not_reported_as_gated() -> None:
+    exc = SimpleNamespace(response=SimpleNamespace(status_code=404))
+    mapped = _http_download_error("Lightricks/LTX-2.3-22b-IC-LoRA-LipDub", "old-name.safetensors", exc, gated=True)
+    assert "not found" in str(mapped).lower()
+    assert "Gated" not in str(mapped)
 
 
 def test_incomplete_blob_fallback(tmp_path, monkeypatch) -> None:

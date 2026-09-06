@@ -33,3 +33,6 @@ def test_catalog_default_commercial() -> None:
     catalog = load_catalogs(REPO / "catalog")
     assert catalog.models["qwen-image-2512-fp8"].commercial is True
     assert catalog.models["qwen-image-2512-fp8"].noncommercial_only is False
+    assert catalog.models["chatterbox-multilingual"].commercial is True
+    assert catalog.models["chatterbox-hi"].commercial is True
+    assert catalog.models["ace-step-1.5"].commercial is True

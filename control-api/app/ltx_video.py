@@ -356,7 +356,7 @@ def _drop_uninstalled_auto_loras(plan: dict[str, Any]) -> dict[str, Any]:
     bundles: list[str] = []
     for lora in kept_ic:
         name = str(lora.get("name") or "")
-        if "lipdub" in name:
+        if "lipdub" in name or "dubit" in name:
             bundles.append(ltx_loras.IC_LIPDUB_BUNDLE)
         elif "motion-track" in name:
             bundles.append(ltx_loras.IC_MOTION_BUNDLE)
@@ -406,7 +406,7 @@ def _validate_loras(plan: dict[str, Any]) -> None:
         path = models_root / "loras" / name
         if not path.is_file():
             name_s = str(name)
-            if "lipdub" in name_s:
+            if "lipdub" in name_s or "dubit" in name_s:
                 bundle = ltx_loras.IC_LIPDUB_BUNDLE
             elif "motion-track" in name_s:
                 bundle = ltx_loras.IC_MOTION_BUNDLE

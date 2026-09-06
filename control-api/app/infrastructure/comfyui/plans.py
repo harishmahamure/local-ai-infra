@@ -38,6 +38,12 @@ def build_plan(job: Job, workflow: WorkflowDefinition, preset: Preset, loras: li
         return _qwen_upscale(job, preset)
     if workflow.builder.startswith("ltx_"):
         return _ltx(job, preset, workflow.builder)
+    if workflow.builder.startswith("ace_step"):
+        return _ace(job, preset, workflow.builder)
+    if workflow.builder.startswith("tts_"):
+        return _tts(job, preset)
+    if workflow.builder.startswith("ffmpeg_"):
+        return _ffmpeg(job, preset, workflow.builder)
     raise ValueError(f"Unknown builder: {workflow.builder}")
 
 
@@ -196,4 +202,68 @@ def _ltx(job: Job, preset: Preset, builder: str) -> dict[str, Any]:
         plan["ic_loras"] = [ltx_loras.explicit_ic_lora("motion_track")]
         plan["ic_enabled"] = True
         plan["ic_guide_raw"] = True
+    return plan
+
+
+def _ace(job: Job, preset: Preset, builder: str) -> dict[str, Any]:
+    kind = {
+        "ace_step_music": "music",
+        "ace_step_sfx": "sfx",
+        "ace_step_ambience": "ambience",
+        "ace_step_foley": "foley",
+    }.get(builder, "music")
+    prompt = str(job.inputs.get("prompt") or "")
+    if kind == "music" and (job.inputs.get("no_vocals") is True or preset.parameters.get("no_vocals")):
+        prompt = f"{prompt}, instrumental, no vocals".strip(", ")
+    if kind == "sfx" and "sfx" not in prompt.lower():
+        prompt = f"[sfx] {prompt}".strip()
+    if kind == "ambience" and "ambience" not in prompt.lower():
+        prompt = f"ambience, {prompt}".strip()
+    duration = (
+        job.inputs.get("duration_seconds")
+        or job.parameters.get("duration_seconds")
+        or preset.parameters.get("duration_seconds")
+        or (24 if kind == "music" else 4)
+    )
+    return {
+        "kind": kind,
+        "prompt": prompt,
+        "duration_seconds": float(duration),
+        "mood": job.inputs.get("mood"),
+        "seed": _seed(job),
+        "steps": int(job.parameters.get("steps") or preset.parameters.get("steps") or 8),
+        "cfg": float(job.parameters.get("cfg") or preset.parameters.get("cfg") or 4.0),
+        "filename_prefix": f"engine_ace_{kind}",
+        "video_ignored": kind == "foley" and bool(job.inputs.get("video")),
+    }
+
+
+def _tts(job: Job, preset: Preset) -> dict[str, Any]:
+    language = str(job.inputs.get("language") or job.parameters.get("language") or preset.parameters.get("language") or "en")
+    return {
+        "text": str(job.inputs.get("text") or ""),
+        "language": language,
+        "voice": job.inputs.get("voice") or preset.parameters.get("voice"),
+        "style": job.inputs.get("style") or preset.parameters.get("style"),
+        "speaking_rate": float(job.parameters.get("speaking_rate") or preset.parameters.get("speaking_rate") or 1.0),
+        "seed": _seed(job),
+    }
+
+
+def _ffmpeg(job: Job, preset: Preset, builder: str) -> dict[str, Any]:
+    plan: dict[str, Any] = {
+        "builder": builder,
+        "target_lufs": job.parameters.get("target_lufs")
+        or job.inputs.get("target_lufs")
+        or preset.parameters.get("target_lufs")
+        or -16,
+        "true_peak_db": job.inputs.get("true_peak_db") or -1.5,
+        "duration_seconds": job.inputs.get("duration_seconds"),
+        "stems": job.inputs.get("stems") or [],
+        "clips": job.inputs.get("clips") or [],
+        "transition": job.inputs.get("transition") or "cut",
+        "transition_seconds": job.inputs.get("transition_seconds") or 0,
+        "audio_offset_seconds": job.inputs.get("audio_offset_seconds") or 0,
+        "container": job.inputs.get("container") or "mp4",
+    }
     return plan

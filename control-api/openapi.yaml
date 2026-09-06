@@ -6,7 +6,8 @@ info:
 
     - **Engine `/v1`** — catalog operations, job queue, assets, text chat.
 
-    - **Control `/api/v1`** — GPU profiles, catalog downloads, generate / upscale / LTX, cleanup.
+    - **Control `/api/v1`** — GPU profiles, catalog downloads, generate / upscale
+    / LTX, cleanup.
 
 
     Mac proxy: `http://127.0.0.1:8090` → GPU `http://192.168.50.100:8090`.
@@ -24,8 +25,9 @@ paths:
       tags:
       - Engine (/v1)
       summary: Submit a catalog job
-      description: Queue an implemented operation (image.generate, video.generate, text.chat, …). Pass
-        Idempotency-Key to replay the same accept response. Inputs use asset_id, not filesystem paths.
+      description: Queue an implemented operation (image.generate, video.generate,
+        text.chat, …). Pass Idempotency-Key to replay the same accept response. Inputs
+        use asset_id, not filesystem paths.
       operationId: submit_job_v1_jobs_post
       parameters:
       - name: Idempotency-Key
@@ -85,8 +87,8 @@ paths:
       tags:
       - Engine (/v1)
       summary: Job event stream (SSE)
-      description: Server-sent events for job.progress, job.completed, job.failed, job.cancelled. Keepalive
-        comments every 15s.
+      description: Server-sent events for job.progress, job.completed, job.failed,
+        job.cancelled. Keepalive comments every 15s.
       operationId: job_events_v1_jobs__job_id__events_get
       parameters:
       - name: job_id
@@ -137,8 +139,8 @@ paths:
       tags:
       - Engine (/v1)
       summary: Retry a job
-      description: 'strategy: same | new_seed | override | rerun_stage. override may send new parameters;
-        rerun_stage needs stage.'
+      description: 'strategy: same | new_seed | override | rerun_stage. override may
+        send new parameters; rerun_stage needs stage.'
       operationId: retry_job_v1_jobs__job_id__retry_post
       parameters:
       - name: job_id
@@ -170,7 +172,7 @@ paths:
       tags:
       - Engine (/v1)
       summary: List operations
-      description: Catalog operations with available flags and input schemas.
+      description: Catalog operations with implemented/available flags and input schemas.
       operationId: list_operations_v1_operations_get
       responses:
         '200':
@@ -178,6 +180,33 @@ paths:
           content:
             application/json:
               schema: {}
+  /v1/operations/{operation_id}:
+    get:
+      tags:
+      - Engine (/v1)
+      summary: Get one operation contract
+      description: Full input/output schema, implemented flag, availability reason,
+        required models, and workflow ids.
+      operationId: get_operation_v1_operations__operation_id__get
+      parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Operation Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/capabilities:
     get:
       tags:
@@ -406,8 +435,8 @@ paths:
       tags:
       - Engine (/v1)
       summary: Text + vision chat
-      description: Synchronous JSON or SSE when stream=true. Starts llama-fast or gemma as needed. Not
-        a Comfy job.
+      description: Synchronous JSON or SSE when stream=true. Starts llama-fast or
+        gemma as needed. Not a Comfy job.
       operationId: text_chat_v1_text_chat_post
       requestBody:
         content:
@@ -654,8 +683,8 @@ paths:
       tags:
       - Control UI (legacy /api/v1)
       summary: Queue image generation
-      description: Multi-prompt batch (`prompts[]`) or shorthand (`prompt` + `count`). Gemma plans once,
-        then Comfy runs items. Partial failures continue.
+      description: Multi-prompt batch (`prompts[]`) or shorthand (`prompt` + `count`).
+        Gemma plans once, then Comfy runs items. Partial failures continue.
       operationId: api_generate_post_api_v1_generate_post
       requestBody:
         content:
@@ -983,8 +1012,8 @@ paths:
       tags:
       - Control UI (legacy /api/v1)
       summary: Queue LTX-2.5 video
-      description: t2v / i2v / a2v / flf2v / lipsync / motion_transfer on Comfy LTX :8189. Duration 1–30s.
-        Camera is prompt-only. audioPrompt recommended.
+      description: t2v / i2v / a2v / flf2v / lipsync / motion_transfer on Comfy LTX
+        :8189. Duration 1–30s. Camera is prompt-only. audioPrompt recommended.
       operationId: api_ltx_video_post_api_v1_ltx_video_post
       requestBody:
         content:
@@ -1506,7 +1535,8 @@ components:
           - type: string
           - type: 'null'
           title: Preset
-          description: ltx_reel | ltx_landscape | ltx_square | ltx_quality | ltx_studio | ltx_fast
+          description: ltx_reel | ltx_landscape | ltx_square | ltx_quality | ltx_studio
+            | ltx_fast
         orientation:
           anyOf:
           - type: string
@@ -1660,7 +1690,8 @@ components:
             pattern: ^(auto|none|dolly_in|dolly_out|dolly_left|dolly_right|jib_up|jib_down|static)$
           - type: 'null'
           title: Cameramotion
-          description: Prompt-only camera language. LTX-2 19B camera LoRAs are not loaded on 2.5.
+          description: Prompt-only camera language. LTX-2 19B camera LoRAs are not
+            loaded on 2.5.
         referenceVideo:
           anyOf:
           - type: string
@@ -1819,7 +1850,8 @@ components:
         operation:
           type: string
           title: Operation
-          description: Catalog operation id, e.g. image.generate, video.generate, video.lipsync
+          description: Catalog operation id, e.g. image.generate, video.generate,
+            video.lipsync
         preset:
           type: string
           title: Preset
@@ -1829,7 +1861,8 @@ components:
           additionalProperties: true
           type: object
           title: Inputs
-          description: Operation inputs. Use {asset_id} objects for files, not filesystem paths.
+          description: Operation inputs. Use {asset_id} objects for files, not filesystem
+            paths.
         parameters:
           additionalProperties: true
           type: object

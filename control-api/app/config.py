@@ -23,7 +23,8 @@ CONTROL_PORT = int(os.environ.get("CONTROL_PORT", "8090"))
 AI_VENV = Path(os.environ.get("AI_VENV", HOME / "ai-inference" / "venv"))
 PYTHON = AI_VENV / "bin" / "python"
 
-VALID_PROFILES = {"llama-fast", "comfy", "comfy-ltx", "gemma"}
+VALID_PROFILES = {"llama-fast", "comfy", "comfy-ltx", "gemma", "tts"}
+CHATTERBOX_MODELS = Path(os.environ.get("CHATTERBOX_MODELS", HOME / "ai-inference" / "models" / "chatterbox"))
 
 ENGINE_DB = Path(os.environ.get("AI_ENGINE_DB", LOGS / "engine.sqlite"))
 ARTIFACT_ROOT = Path(os.environ.get("AI_ARTIFACT_ROOT", LOGS / "artifacts"))

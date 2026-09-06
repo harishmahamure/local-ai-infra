@@ -37,15 +37,55 @@ def test_operations_and_capabilities() -> None:
     ids = {item["id"] for item in ops}
     assert "image.generate" in ids
     assert "audio.tts" in ids
+    assert "audio.music" in ids
+    assert "audio.foley" in ids
+    assert "video.upscale" in ids
+    assert "media.finalize" in ids
     audio = next(item for item in ops if item["id"] == "audio.tts")
-    assert audio["available"] is False
+    assert audio["available"] is True
+    assert audio["implemented"] is True
+    assert "text" in (audio["input_schema"].get("required") or [])
+    assert audio["output_schema"]
+    music = next(item for item in ops if item["id"] == "audio.music")
+    assert music["implemented"] is True
+    assert music["available"] is True
+    assert "prompt" in (music["input_schema"].get("required") or [])
+    lipsync = next(item for item in ops if item["id"] == "video.lipsync")
+    assert lipsync["implemented"] is True
     caps = client.get("/v1/capabilities").json()
     assert caps["image"]["generate"] is True
-    assert caps["audio"]["music"] is False
+    assert caps["audio"]["music"] is True
+    assert caps["audio"]["foley"] is True
+    assert caps["audio"]["tts"]
+    assert caps["video"]["upscale"] is False
+    assert caps["media"]["concat"] is True
     text = next(item for item in ops if item["id"] == "text.chat")
     assert text["available"] is True
+    assert text["implemented"] is True
     assert caps["text"]["chat"] is True
     assert caps["text"]["vision"] is True
+
+
+def test_get_operation_contract() -> None:
+    client = _client()
+    lipsync = client.get("/v1/operations/video.lipsync").json()
+    assert lipsync["id"] == "video.lipsync"
+    assert lipsync["implemented"] is True
+    assert lipsync["available"] is True
+    assert "ltx-iclora-lipdub" in lipsync["required_models"]
+    assert "ltx25-lipsync" in lipsync["workflow_ids"]
+    assert "audio" in (lipsync["input_schema"].get("required") or [])
+    music = client.get("/v1/operations/audio.music").json()
+    assert music["implemented"] is True
+    assert music["available"] is True
+    assert music.get("reason") in {None, ""}
+    assert "ace-step-1.5" in music["required_models"]
+    assert "prompt" in (music["input_schema"].get("required") or [])
+    assert music["output_schema"]
+    assert "audio-music" in music["workflow_ids"]
+    missing = client.get("/v1/operations/movie.direct")
+    assert missing.status_code == 400
+    assert missing.json()["error"]["code"] == "UNSUPPORTED_OPERATION"
 
 
 def test_submit_get_complete() -> None:
@@ -140,9 +180,63 @@ def test_signed_upload_rejected() -> None:
 
 def test_unimplemented_operation() -> None:
     client = _client()
-    res = client.post("/v1/jobs", json={"operation": "audio.tts", "preset": "master", "inputs": {"text": "hi"}})
+    res = client.post("/v1/jobs", json={"operation": "video.continue", "preset": "master", "inputs": {"source_video": {"asset_id": "ast_x"}, "prompt": "next shot"}})
     assert res.status_code == 400
     assert res.json()["error"]["code"] == "UNSUPPORTED_OPERATION"
+
+
+def test_phase_a_jobs_accepted() -> None:
+    client = _client()
+    tts = client.post("/v1/jobs", json={"operation": "audio.tts", "preset": "narrator_hindi", "inputs": {"text": "नमस्ते"}})
+    assert tts.status_code == 202, tts.text
+    music = client.post(
+        "/v1/jobs",
+        json={"operation": "audio.music", "preset": "cinematic_master", "inputs": {"prompt": "sparse drone", "duration_seconds": 24}},
+    )
+    assert music.status_code == 202, music.text
+    missing_tts = client.post("/v1/jobs", json={"operation": "audio.tts", "preset": "master", "inputs": {}})
+    assert missing_tts.status_code == 400
+    missing_music = client.post("/v1/jobs", json={"operation": "audio.music", "preset": "master", "inputs": {}})
+    assert missing_music.status_code == 400
+
+    up = client.post("/v1/assets", files={"file": ("t.png", PNG, "image/png")})
+    asset_id = up.json()["asset_id"]
+    mix = client.post(
+        "/v1/jobs",
+        json={
+            "operation": "audio.mix",
+            "preset": "cinematic",
+            "inputs": {"stems": [{"asset_id": asset_id, "role": "music", "gain_db": -3}]},
+        },
+    )
+    assert mix.status_code == 202, mix.text
+    concat = client.post(
+        "/v1/jobs",
+        json={
+            "operation": "media.concat",
+            "preset": "master",
+            "inputs": {"clips": [{"asset_id": asset_id}, {"asset_id": asset_id}], "transition": "cut"},
+        },
+    )
+    assert concat.status_code == 202, concat.text
+    finalize = client.post(
+        "/v1/jobs",
+        json={
+            "operation": "media.finalize",
+            "preset": "master",
+            "inputs": {"video": {"asset_id": asset_id}, "audio": {"asset_id": asset_id}},
+        },
+    )
+    assert finalize.status_code == 202, finalize.text
+    missing_mix = client.post("/v1/jobs", json={"operation": "audio.mix", "preset": "master", "inputs": {"stems": []}})
+    assert missing_mix.status_code == 400
+    missing_concat = client.post(
+        "/v1/jobs",
+        json={"operation": "media.concat", "preset": "master", "inputs": {"clips": [{"asset_id": asset_id}]}},
+    )
+    assert missing_concat.status_code == 400
+    missing_final = client.post("/v1/jobs", json={"operation": "media.finalize", "preset": "master", "inputs": {}})
+    assert missing_final.status_code == 400
 
 
 def test_cancel_and_retry() -> None:

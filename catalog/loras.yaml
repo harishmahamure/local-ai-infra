@@ -110,7 +110,7 @@ loras:
   - id: ltx-iclora-lipdub
     family: ltx-2.3
     role: lipsync
-    file: ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors
+    file: ltx-2.3-22b-ic-lora-dubit-0.9.safetensors
     bundle: ltx-iclora-lipdub
     compatible_models: [ltx-2.5-distilled, ltx-2.5-studio]
     recommended_strength: 1.0

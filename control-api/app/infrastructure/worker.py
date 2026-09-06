@@ -162,28 +162,33 @@ class JobWorker:
 
             asset_ids = self._persist_outputs(job, workflow, plan, result, loras)
             job.model_ids = list(result.model_ids)
-            job.result = JobResult(
-                asset_ids=asset_ids,
-                manifest=ReproducibilityManifest(
-                    job_id=job.job_id,
-                    operation=job.operation,
-                    preset=job.preset,
-                    workflow_id=workflow.id,
-                    workflow_version=workflow.version,
-                    model_ids=list(result.model_ids),
-                    lora_ids=[x.get("id") for x in loras],
-                    lora_strengths=[float(x.get("strength") or 0) for x in loras],
-                    seed=result.seed,
-                    prompt=job.inputs.get("prompt"),
-                    negative_prompt=job.inputs.get("negative_prompt"),
-                    steps=plan.get("steps"),
-                    cfg=plan.get("cfg"),
-                    width=plan.get("width"),
-                    height=plan.get("height"),
-                    fps=plan.get("fps"),
-                    execution_duration_ms=result.duration_ms,
-                ).to_dict(),
-            )
+            manifest = ReproducibilityManifest(
+                job_id=job.job_id,
+                operation=job.operation,
+                preset=job.preset,
+                workflow_id=workflow.id,
+                workflow_version=workflow.version,
+                model_ids=list(result.model_ids),
+                lora_ids=[x.get("id") for x in loras],
+                lora_strengths=[float(x.get("strength") or 0) for x in loras],
+                seed=result.seed,
+                prompt=job.inputs.get("prompt"),
+                negative_prompt=job.inputs.get("negative_prompt"),
+                steps=plan.get("steps"),
+                cfg=plan.get("cfg"),
+                width=plan.get("width"),
+                height=plan.get("height"),
+                fps=plan.get("fps"),
+                execution_duration_ms=result.duration_ms,
+            ).to_dict()
+            warnings = list(result.extra.get("warnings") or [])
+            if plan.get("video_ignored"):
+                warning = "audio.foley is prompt-only in Phase A; video input was ignored"
+                if warning not in warnings:
+                    warnings.append(warning)
+            if warnings:
+                manifest["warnings"] = warnings
+            job.result = JobResult(asset_ids=asset_ids, manifest=manifest)
             job.mark(JobStatus.COMPLETED, phase="done", progress=1.0)
             job.finished_at = self.clock.now_iso()
             self.jobs.save(job)

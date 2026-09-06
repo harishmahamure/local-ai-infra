@@ -76,9 +76,14 @@ Stable Audio Open, RIFE.
 
 ## Missing integrations (later phases)
 
-SAM, depth-as-operation, DINO QC, DFR, SeedVR2, FlashVSR, RIFE, LatentSync,
-Chatterbox, ACE-Step, Stable Audio Open, FFmpeg mix/concat/finalize.
+Operation **contracts** for the film assembly path are frozen in
+[movie-production-ops.md](movie-production-ops.md) and
+`GET /v1/operations`. Executors and weights are not wired:
 
-LTX-2.3 IC-LoRAs are `compatibility_test_required: true` and must not be
-auto-selected for LTX 2.5 MASTER. LTX-2 19B camera/detailer adapters are not
-in the catalog.
+SAM / depth-as-operation, DINO QC, DFR, SeedVR2, FlashVSR, RIFE, LatentSync
+(LTX LipDub covers `video.lipsync` today), commercial-safe TTS (Chatterbox /
+Kokoro-class), ACE-Step-class music, FFmpeg mix / concat / finalize.
+
+Do **not** add Stable Audio Open (blocked license). LTX-2.3 IC-LoRAs are
+`compatibility_test_required: true` and must not be auto-selected for LTX 2.5
+MASTER. LTX-2 19B camera/detailer adapters are not in the catalog.

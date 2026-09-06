@@ -315,7 +315,8 @@ models:
         path: ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors
         local: loras/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors
 
-  # Official LTX-2.3 LipDub IC-LoRA (image/video + uploaded audio).
+  # Official LTX-2.3 LipDub / DubIt IC-LoRA (image/video + uploaded audio).
+  # HF renamed the weight to dubit; bundle id stays ltx-iclora-lipdub.
   # Download: ./bin/ai download ltx-iclora-lipdub
   - id: ltx-iclora-lipdub
     license: LTX-2-Community
@@ -326,8 +327,8 @@ models:
     vram_gb: 3
     files:
       - repo: Lightricks/LTX-2.3-22b-IC-LoRA-LipDub
-        path: ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors
-        local: loras/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors
+        path: ltx-2.3-22b-ic-lora-dubit-0.9.safetensors
+        local: loras/ltx-2.3-22b-ic-lora-dubit-0.9.safetensors
 
   # Official LTX-2.3 Motion Track IC-LoRA (reference-video motion transfer).
   # Download: ./bin/ai download ltx-iclora-motion-track
@@ -392,3 +393,83 @@ models:
       - repo: jimbothigpen/Qwen3.6-35B-A3B-GGUF
         path: Qwen3.6-35B-A3B-mmproj-F16.gguf
         local: Qwen3.6-35B-A3B-mmproj-F16.gguf
+
+  - id: chatterbox-multilingual
+    license: MIT
+    commercial: true
+    dest: chatterbox
+    vram_gb: 4
+    family: chatterbox
+    role: tts
+    version: "v3"
+    provider: ResembleAI
+    estimated_vram: 4
+    supported_operations: [audio.tts]
+    runtime: tts
+    recommended_presets: [draft, master, narrator_hindi, dialogue_hindi]
+    enabled: true
+    files:
+      - repo: ResembleAI/chatterbox
+        path: t3_mtl23ls_v3.safetensors
+        local: t3_mtl23ls_v3.safetensors
+      - repo: ResembleAI/chatterbox
+        path: s3gen_v3.safetensors
+        local: s3gen_v3.safetensors
+      - repo: ResembleAI/chatterbox
+        path: ve.safetensors
+        local: ve.safetensors
+      - repo: ResembleAI/chatterbox
+        path: grapheme_mtl_merged_expanded_v1.json
+        local: grapheme_mtl_merged_expanded_v1.json
+      - repo: ResembleAI/chatterbox
+        path: Cangjie5_TC.json
+        local: Cangjie5_TC.json
+      - repo: ResembleAI/chatterbox
+        path: conds.pt
+        local: conds.pt
+        optional: true
+
+  - id: chatterbox-hi
+    license: MIT
+    commercial: true
+    dest: chatterbox
+    vram_gb: 0
+    family: chatterbox
+    role: tts-hindi
+    version: "v3"
+    provider: ResembleAI
+    depends_on: [chatterbox-multilingual]
+    estimated_vram: 4
+    supported_operations: [audio.tts]
+    runtime: tts
+    recommended_presets: [narrator_hindi, dialogue_hindi]
+    enabled: true
+    files:
+      - repo: ResembleAI/Chatterbox-Multilingual-hi
+        path: t3_hi.safetensors
+        local: t3_hi.safetensors
+
+  - id: ace-step-1.5
+    license: Apache-2.0
+    commercial: true
+    dest: comfyui
+    vram_gb: 8
+    family: ace-step
+    role: music
+    version: "1.5"
+    provider: ACE-Step
+    estimated_vram: 8
+    supported_operations: [audio.music, audio.sfx, audio.ambience, audio.foley]
+    runtime: comfyui
+    recommended_presets: [draft, balanced, master, cinematic_master]
+    enabled: true
+    files:
+      - repo: Comfy-Org/ace_step_1.5_ComfyUI_files
+        path: split_files/diffusion_models/acestep_v1.5_turbo.safetensors
+        local: diffusion_models/acestep_v1.5_turbo.safetensors
+      - repo: Comfy-Org/ace_step_1.5_ComfyUI_files
+        path: split_files/text_encoders/qwen_1.7b_ace15.safetensors
+        local: text_encoders/qwen_1.7b_ace15.safetensors
+      - repo: Comfy-Org/ace_step_1.5_ComfyUI_files
+        path: split_files/vae/ace_1.5_vae.safetensors
+        local: vae/ace_1.5_vae.safetensors

@@ -181,6 +181,15 @@ def get_status() -> dict[str, Any]:
 def start_profile(profile_id: str) -> dict[str, Any]:
     if profile_id not in config.VALID_PROFILES:
         raise ValueError(f"Unknown profile: {profile_id}")
+    if profile_id == "tts":
+        stop_profile()
+        status = get_status()
+        status["profile"] = "tts"
+        status["loadState"] = "LOADED"
+        status["apiState"] = "in-process"
+        status["model"] = "Chatterbox multilingual TTS (in-process)"
+        status["activeUrl"] = None
+        return status
     proc = _run_control("start", profile_id, check=False)
     if proc.returncode != 0:
         parts = [p for p in (proc.stdout.strip(), proc.stderr.strip()) if p]
@@ -196,6 +205,8 @@ def wait_for_profile(
     poll_sec: float = 2.0,
 ) -> dict[str, Any]:
     """Poll until the requested profile is LOADED or timeout/failure."""
+    if profile_id == "tts":
+        return start_profile("tts")
     unit_map = {
         "comfy": "comfyui",
         "comfy-ltx": "comfyui-ltx",
@@ -272,5 +283,6 @@ def _model_env() -> dict[str, str]:
     env = os.environ.copy()
     env.setdefault("COMFYUI_ROOT", str(Path.home() / "ComfyUI" / "models"))
     env.setdefault("LLAMACPP_MODELS", str(Path.home() / "ai-inference" / "models" / "llamacpp"))
+    env.setdefault("CHATTERBOX_MODELS", str(Path.home() / "ai-inference" / "models" / "chatterbox"))
     env.setdefault("INSTALLED_JSON", str(config.ROOT / "catalog" / "installed.json"))
     return env

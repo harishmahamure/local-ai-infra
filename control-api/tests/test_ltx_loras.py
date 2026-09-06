@@ -192,7 +192,7 @@ def test_graph_lipsync_fml() -> None:
     assert "LTXAddVideoICLoRAGuide" in types
     assert types.count("LTXVAddGuide") == 2
     loader = next(n for n in graph.values() if n["class_type"] == "LTXICLoRALoaderModelOnly")
-    assert "lipdub" in loader["inputs"]["lora_name"]
+    assert "dubit" in loader["inputs"]["lora_name"]
 
 
 def test_graph_motion_transfer_raw_frames() -> None:
