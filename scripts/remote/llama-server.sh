@@ -32,14 +32,24 @@ llama_help() {
   "$SERVER_BIN" --help 2>&1 || true
 }
 
+LLAMA_HELP_TEXT=""
+llama_help_text() {
+  if [[ -z "$LLAMA_HELP_TEXT" ]]; then
+    LLAMA_HELP_TEXT="$(llama_help)"
+  fi
+  printf '%s' "$LLAMA_HELP_TEXT"
+}
+
 llama_supports_flag() {
   local flag="$1"
-  llama_help | grep -qF -- "$flag"
+  llama_help_text >/dev/null
+  [[ "$LLAMA_HELP_TEXT" == *"$flag"* ]]
 }
 
 llama_supports_cache_type() {
   local cache_type="$1"
-  llama_help | grep -Eiq "(${cache_type}|cache-type-k.*${cache_type})"
+  llama_help_text >/dev/null
+  [[ "$LLAMA_HELP_TEXT" == *"$cache_type"* ]]
 }
 
 resolve_cache_type() {
@@ -66,8 +76,10 @@ resolve_cache_type() {
 CACHE_K=""
 CACHE_V=""
 if [[ -n "${CACHE_TYPE_K:-}" || -n "${CACHE_TYPE_V:-}" ]]; then
-  CACHE_K="$(resolve_cache_type "${CACHE_TYPE_K:-iso3}" "q8_0")"
-  CACHE_V="$(resolve_cache_type "${CACHE_TYPE_V:-iso3}" "q8_0")"
+  # Trust the profile env. Help-sniffing used to drop iso3 (grep -q + ARG_MAX)
+  # and silently fall back to q8_0, which OOMs a 1M context on 32GB.
+  CACHE_K="${CACHE_TYPE_K:-iso3}"
+  CACHE_V="${CACHE_TYPE_V:-iso3}"
 fi
 
 ARGS=(
@@ -82,35 +94,27 @@ ARGS=(
   --top-k "${TOP_K:-20}"
 )
 
-if llama_supports_flag "--flash-attn"; then
-  ARGS+=(--flash-attn "${FLASH_ATTN:-on}")
+if [[ -n "${FLASH_ATTN:-}" ]]; then
+  ARGS+=(--flash-attn "${FLASH_ATTN}")
 fi
 
-if llama_supports_flag "--jinja"; then
-  ARGS+=(--jinja)
-fi
+ARGS+=(--jinja)
 
 if [[ -n "$CACHE_K" && -n "$CACHE_V" ]]; then
-  if llama_supports_flag "--cache-type-k"; then
-    ARGS+=(--cache-type-k "$CACHE_K" --cache-type-v "$CACHE_V")
-  else
-    echo "llama-server: --cache-type-k not supported; running with default FP16 KV cache" >&2
-  fi
+  ARGS+=(--cache-type-k "$CACHE_K" --cache-type-v "$CACHE_V")
+fi
+
+if [[ -n "${PARALLEL:-}" ]]; then
+  ARGS+=(--parallel "$PARALLEL")
 fi
 
 if [[ -n "${ROPE_SCALING:-}" ]]; then
-  if llama_supports_flag "--rope-scaling"; then
-    ARGS+=(--rope-scaling "$ROPE_SCALING")
-  fi
-  if [[ -n "${YARN_ORIG_CTX:-}" ]] && llama_supports_flag "--yarn-orig-ctx"; then
+  ARGS+=(--rope-scaling "$ROPE_SCALING")
+  if [[ -n "${YARN_ORIG_CTX:-}" ]]; then
     ARGS+=(--yarn-orig-ctx "$YARN_ORIG_CTX")
   fi
   if [[ -n "${ROPE_SCALE:-}" ]]; then
-    if llama_supports_flag "--rope-scale"; then
-      ARGS+=(--rope-scale "$ROPE_SCALE")
-    elif llama_supports_flag "--yarn-ext-factor"; then
-      ARGS+=(--yarn-ext-factor "$ROPE_SCALE")
-    fi
+    ARGS+=(--rope-scale "$ROPE_SCALE")
   fi
 fi
 
@@ -122,4 +126,5 @@ if [[ "${ENABLE_MTP:-0}" == "1" && -n "${MTP_PATH:-}" && -f "$MTP_PATH" ]]; then
   ARGS+=(-md "$MTP_PATH" --spec-type draft-mtp)
 fi
 
+echo "llama-server argv: ${ARGS[*]}" >&2
 exec "$SERVER_BIN" "${ARGS[@]}"
