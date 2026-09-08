@@ -2,23 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..application.text_chat import TEXT_CHAT_MODELS
 from ..domain.errors import DomainError, ErrorCode
 from ..domain.models import ModelState
-from ..application.catalog import CatalogRegistry
+from .catalogs import CatalogRegistry
 
-PROFILE_FOR_DEST = {
-    "comfyui": "comfy",
-    "llamacpp": "llama-fast",
-}
 
-LTX_MODELS = {
-    "ltx-2.5-distilled",
-    "ltx-2.5-studio",
-    "ltx-2.5-prompt-enhancer",
-    "ltx-iclora-union",
-    "ltx-iclora-lipdub",
-    "ltx-iclora-motion-track",
-}
+def profile_for_text_model(model_id: str) -> str:
+    if model_id.startswith("gemma"):
+        return "gemma"
+    return "llama-fast"
 
 
 class CatalogModelRuntime:
@@ -45,13 +38,10 @@ class CatalogModelRuntime:
         status = self.disk_status().get(model_id, "missing")
         if status == "complete":
             loaded = str((self._runtime.get_status() or {}).get("profile") or "")
-            wanted = self._profile_for(model_id)
-            unit = "comfyui" if wanted == "comfy" else "comfyui-ltx" if wanted == "comfy-ltx" else wanted
-            if loaded == unit:
+            wanted = self.profile_for(model_id)
+            if loaded == wanted:
                 return ModelState.READY
             return ModelState.AVAILABLE
-        if status == "partial":
-            return ModelState.NOT_DOWNLOADED
         return ModelState.NOT_DOWNLOADED
 
     def load(self, model_id: str) -> dict[str, Any]:
@@ -59,33 +49,16 @@ class CatalogModelRuntime:
             raise DomainError(ErrorCode.MODEL_NOT_AVAILABLE, f"Unknown model {model_id}")
         if self.state(model_id) == ModelState.NOT_DOWNLOADED:
             raise DomainError(ErrorCode.MODEL_NOT_AVAILABLE, f"{model_id} is not downloaded")
-        profile = self._profile_for(model_id)
-        return self._runtime.start_profile(profile)
+        return self._runtime.start_profile(self.profile_for(model_id))
 
     def unload(self, model_id: str) -> dict[str, Any]:
         self._runtime.stop_profile()
         return self._runtime.get_status()
 
-    def _profile_for(self, model_id: str) -> str:
-        if model_id in LTX_MODELS:
-            return "comfy-ltx"
-        model = self._catalog.models[model_id]
-        if model.dest == "chatterbox" or model.runtime == "tts":
-            return "tts"
-        if model.dest == "llamacpp":
-            return profile_for_text_model(model_id)
-        if model_id.startswith("gemma"):
-            return "gemma"
-        return "comfy"
-
     def profile_for(self, model_id: str) -> str:
-        return self._profile_for(model_id)
-
-
-def profile_for_text_model(model_id: str) -> str:
-    if model_id.startswith("gemma"):
-        return "gemma"
-    return "llama-fast"
+        if model_id not in TEXT_CHAT_MODELS and model_id not in self._catalog.models:
+            raise DomainError(ErrorCode.MODEL_NOT_AVAILABLE, f"Unknown model {model_id}")
+        return profile_for_text_model(model_id)
 
 
 class SystemdModelDownloader:

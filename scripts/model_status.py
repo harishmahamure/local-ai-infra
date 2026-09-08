@@ -17,9 +17,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "catalog" / "models.yaml"
-COMFY_ROOT = Path(os.environ.get("COMFYUI_ROOT", os.path.expanduser("~/ComfyUI/models")))
 LLAMA_ROOT = Path(os.environ.get("LLAMACPP_MODELS", os.path.expanduser("~/ai-inference/models/llamacpp")))
-CHATTERBOX_ROOT = Path(os.environ.get("CHATTERBOX_MODELS", os.path.expanduser("~/ai-inference/models/chatterbox")))
 INSTALLED = Path(os.environ.get("INSTALLED_JSON", ROOT / "catalog" / "installed.json"))
 
 
@@ -43,10 +41,6 @@ def file_state(path: Path) -> dict:
 
 
 def dest_root(dest: str) -> Path:
-    if dest == "comfyui":
-        return COMFY_ROOT
-    if dest == "chatterbox":
-        return CHATTERBOX_ROOT
     return LLAMA_ROOT
 
 
@@ -106,8 +100,7 @@ def load_catalog() -> dict:
 
 def print_text(bundles: list[dict], installed: dict) -> None:
     print("=== Download status ===")
-    print(f"ComfyUI models: {COMFY_ROOT}")
-    print(f"llama.cpp:      {LLAMA_ROOT}")
+    print(f"llama.cpp: {LLAMA_ROOT}")
     print()
 
     complete = sum(1 for b in bundles if b["status"] == "complete")

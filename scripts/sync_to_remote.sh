@@ -20,29 +20,21 @@ rsync -avz --delete \
   --exclude '.venv' \
   --exclude 'venv' \
   --exclude '.cursor' \
+  --exclude '.pytest_cache' \
   --exclude 'catalog/installed.json' \
   --exclude '__pycache__' \
   --exclude '.DS_Store' \
   "${ROOT}/" "${HOST}:${REMOTE_DIR}/"
 
-# Link ComfyUI extras
 ssh "${HOST}" "bash -s" <<REMOTE
 set -euo pipefail
 CTRL="\${REMOTE_AI_DIR:-\$HOME/ai-inference/control}"
-# shellcheck disable=SC1091
-source "\$CTRL/scripts/remote/comfy_paths.sh"
-mkdir -p "\$COMFYUI_HOME/models"
-if [[ -f "\$CTRL/comfyui/extra_model_paths.yaml" ]]; then
-  cp -f "\$CTRL/comfyui/extra_model_paths.yaml" "\$COMFYUI_HOME/extra_model_paths.yaml"
-fi
 chmod +x "\$CTRL/scripts/remote/"*.sh "\$CTRL/bin/ai" 2>/dev/null || true
 bash "\$CTRL/scripts/remote/install_systemd_units.sh"
-bash "\$CTRL/scripts/remote/install_ltx_workflows.sh" 2>/dev/null || true
 echo "Synced to \$CTRL"
 REMOTE
 
-# Pick up new routes/modules without a full bootstrap.
 ssh "${HOST}" "systemctl --user restart ai-control.service"
 
 echo "Done. Control API restarted on ${HOST}."
-echo "For first-time GPU setup (llama.cpp build), run: ./bin/ai bootstrap"
+echo "For first-time GPU setup, run: ./bin/ai bootstrap"

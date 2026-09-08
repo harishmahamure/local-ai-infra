@@ -2,7 +2,7 @@
 Description=llama-server Qwen3.6-35B-A3B RotorQuant (Q4 + vision)
 After=network-online.target
 Wants=network-online.target
-Conflicts=comfyui.service comfyui-ltx.service gemma.service
+Conflicts=gemma.service
 StartLimitIntervalSec=120
 StartLimitBurst=3
 

@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
-# GPU mutex: at most one inference process (llama-fast | gemma | comfyui | comfyui-ltx).
+# GPU mutex: at most one inference process (llama-fast | gemma).
 #
 #   ensure-exclusive.sh              stop every managed unit + stray processes
 #   ensure-exclusive.sh UNIT.service ExecStartPre: kill strays only
-#                                    (systemd Conflicts= stops the other units;
-#                                    do not systemctl stop from inside a start job)
 set -u
 
 SELF_UNIT="${1:-}"
 SELF_NAME="${SELF_UNIT%.service}"
-UNITS=(llama-fast gemma comfyui comfyui-ltx)
-PORTS=(8080 8081 8188 8189)
+UNITS=(llama-fast gemma)
+PORTS=(8080)
 LOCK_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 LOCK_FILE="${LOCK_DIR}/ai-inference.profile"
 
@@ -58,21 +56,6 @@ kill_stray_inference() {
     extra+=("$pid")
   done < <(pgrep -f '/llama-server( |$)' 2>/dev/null || true)
 
-  while read -r pid; do
-    [[ -n "$pid" ]] || continue
-    extra+=("$pid")
-  done < <(pgrep -f 'ComfyUI/main.py' 2>/dev/null || true)
-
-  while read -r pid; do
-    [[ -n "$pid" ]] || continue
-    extra+=("$pid")
-  done < <(pgrep -f 'ComfyUI-ltx/main.py' 2>/dev/null || true)
-
-  while read -r pid; do
-    [[ -n "$pid" ]] || continue
-    extra+=("$pid")
-  done < <(pgrep -f 'main.py --listen' 2>/dev/null || true)
-
   if ((${#extra[@]} == 0)); then
     return 0
   fi
@@ -109,7 +92,6 @@ wait_gpu_compute_idle() {
 
 mkdir -p "$LOCK_DIR" 2>/dev/null || true
 
-# Full unload (ai stop / ai start) stops systemd units. ExecStartPre must not.
 if [[ -z "$SELF_UNIT" ]]; then
   stop_managed_units
 fi

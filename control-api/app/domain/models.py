@@ -9,7 +9,6 @@ class ModelState(str, Enum):
     NOT_DOWNLOADED = "NOT_DOWNLOADED"
     DOWNLOADING = "DOWNLOADING"
     AVAILABLE = "AVAILABLE"
-    VERIFYING = "VERIFYING"
     LOADING = "LOADING"
     READY = "READY"
     UNLOADING = "UNLOADING"
@@ -38,14 +37,10 @@ class ModelRecord:
     version: str = ""
     provider: str = ""
     noncommercial_only: bool = False
-    dependencies: list[str] = field(default_factory=list)
     estimated_vram: float = 0.0
     supported_operations: list[str] = field(default_factory=list)
-    supported_precisions: list[str] = field(default_factory=list)
-    compatible_loras: list[str] = field(default_factory=list)
     compatible_controls: list[str] = field(default_factory=list)
-    runtime: str = "comfyui"
-    recommended_presets: list[str] = field(default_factory=list)
+    runtime: str = "llamacpp"
     enabled: bool = True
     gated: bool = False
     supported_context: int = 0
@@ -55,7 +50,7 @@ class ModelRecord:
 
     def to_public_dict(self, *, state: ModelState, disk_status: str | None = None) -> dict[str, Any]:
         modalities = list(self.modalities)
-        if not modalities and self.dest == "llamacpp":
+        if not modalities:
             modalities = ["text"]
             if "vision" in self.compatible_controls:
                 modalities.append("vision")
@@ -68,14 +63,10 @@ class ModelRecord:
             "license": self.license,
             "commercial_use": self.commercial,
             "noncommercial_only": self.noncommercial_only,
-            "dependencies": list(self.dependencies),
             "estimated_vram": self.estimated_vram,
             "supported_operations": list(self.supported_operations),
-            "supported_precisions": list(self.supported_precisions),
-            "compatible_loras": list(self.compatible_loras),
             "compatible_controls": list(self.compatible_controls),
             "runtime": self.runtime,
-            "recommended_presets": list(self.recommended_presets),
             "enabled": self.enabled,
             "state": state.value,
             "disk_status": disk_status,

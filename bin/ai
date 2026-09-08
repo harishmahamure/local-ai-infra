@@ -17,10 +17,6 @@ ssh_gpu() {
   ssh "$HOST" "$@"
 }
 
-run_control_ssh() {
-  ssh_gpu "bash ${REMOTE_CONTROL}/scripts/remote/control.sh $*"
-}
-
 usage() {
   cat <<EOF
 Usage: ai <command> [profile]
@@ -32,26 +28,22 @@ Commands:
   switch <profile>    Alias for start
   stop                Stop all GPU services (unload models)
   url                 Print LAN endpoints
-  ui                  Open control UI in browser
   inventory           Remote hardware/software inventory
   sync                Push control repo to GPU box
   bootstrap [--reseed-env]  Remote setup + enable control API + Mac proxy
-  download [id...]    Start background download on GPU (returns immediately)
+  download [id...]    Start background GGUF download on GPU
 
 Profiles:
   llama-fast          Qwen3.6-35B-A3B RotorQuant + vision on :8080
-  gemma               Gemma 4 E4B text + vision planner on :8080
-  comfy               ComfyUI on :8188
-  comfy-ltx           ComfyUI LTX-2.5 on :8189
+  gemma               Gemma 4 E4B text + vision on :8080
 
-Control UI/API: \${CONTROL_URL:-http://127.0.0.1:8090}
-Other services: PUT /api/v1/profile  POST /api/v1/downloads
+Control API: \${CONTROL_URL:-http://127.0.0.1:8090}
+Docs:        \${CONTROL_URL:-http://127.0.0.1:8090}/docs
 
 Examples:
+  ai start gemma
   ai start llama-fast
-  ai switch comfy
-  ai download
-  ai ui
+  ai download gemma-4-e4b
 EOF
 }
 
@@ -63,15 +55,13 @@ push_download_env() {
     token="${HF_TOKEN:-}"
   fi
   if [[ -z "$token" ]]; then
-    echo "Warning: HF_TOKEN not set in $ROOT/.env — gated models (LTX-2.5) will fail." >&2
+    echo "Warning: HF_TOKEN not set in $ROOT/.env — gated HuggingFace repos will fail." >&2
   fi
-  # Write absolute Linux paths on the GPU (never Mac-expanded $HOME from this machine).
   ssh_gpu "TOKEN=$(printf '%q' "$token") bash -s" <<'REMOTE'
 set -euo pipefail
 mkdir -p "$HOME/ai-inference/config"
 cat > "$HOME/ai-inference/config/download.env" <<EOF
 HF_TOKEN=${TOKEN}
-COMFYUI_ROOT=${HOME}/ComfyUI/models
 LLAMACPP_MODELS=${HOME}/ai-inference/models/llamacpp
 HF_HOME=${HOME}/.cache/huggingface
 EOF
@@ -83,34 +73,32 @@ shift || true
 
 case "$cmd" in
   status)
-    status_json="$(api_get /api/v1/status)"
+    status_json="$(api_get /v1/status)"
     print_status_text "$status_json"
     echo
-    print_models_text "$(api_get /api/v1/models)"
+    print_models_text "$(api_get /v1/models)"
     ;;
   models)
-    print_models_text "$(api_get /api/v1/models)"
+    print_models_text "$(api_get /v1/models)"
     ;;
   start|switch)
     profile="${1:-}"
     [[ -n "$profile" ]] || { echo "Profile required" >&2; usage; exit 1; }
-    api_mutate PUT /api/v1/profile "{\"id\":\"${profile}\"}" >/dev/null
+    case "$profile" in
+      llama-fast) model_id="qwen36-35b-a3b-rq" ;;
+      gemma) model_id="gemma-4-e4b" ;;
+      *) echo "Unknown profile: ${profile}" >&2; usage; exit 1 ;;
+    esac
+    api_mutate POST "/v1/models/${model_id}/load" >/dev/null
     echo "Profile ${profile} started (exclusive GPU)."
-    api_get /api/v1/status | python3 -c "import json,sys; s=json.load(sys.stdin); print(s.get('activeUrl') or 'waiting...')"
+    api_get /v1/status | python3 -c "import json,sys; s=json.load(sys.stdin); print(s.get('activeUrl') or 'waiting...')"
     ;;
   stop)
-    api_mutate DELETE /api/v1/profile >/dev/null || true
+    api_mutate POST /v1/models/gemma-4-e4b/unload >/dev/null || true
     echo "All GPU services stopped (UNLOADED)."
     ;;
   url)
-    api_get /api/v1/urls | python3 -c "import json,sys; d=json.load(sys.stdin); print('LLM:   '+d.get('llm','')); print('Comfy: '+d.get('comfy','')); print('LTX:   '+d.get('comfyLtx','')); print('Ctrl:  '+d.get('control',''))"
-    ;;
-  ui)
-    base="$(api_base)" || base="${CONTROL_URL:-http://127.0.0.1:8090}"
-    echo "Control UI: ${base}/"
-    if command -v open >/dev/null; then
-      open "${base}/"
-    fi
+    api_get /v1/status | python3 -c "import json,sys; d=json.load(sys.stdin); eps=d.get('endpoints') or {}; print('LLM:  '+(d.get('activeUrl') or eps.get('llm',''))); print('Ctrl: '+eps.get('control',''))"
     ;;
   download)
     push_download_env
@@ -119,8 +107,8 @@ case "$cmd" in
       ids_json="$(printf '%s\n' "$@" | python3 -c "import json,sys; print(json.dumps({'ids':[l.strip() for l in sys.stdin if l.strip()]}))")"
       body="$ids_json"
     fi
-    if resp="$(api_mutate POST /api/v1/downloads "$body" 2>&1)"; then
-      echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"Download {d.get('status')} (background on GPU). Check: ai models or UI.\")"
+    if resp="$(api_mutate POST /v1/downloads "$body" 2>&1)"; then
+      echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"Download {d.get('status')} (background on GPU). Check: ai models.\")"
     else
       echo "$resp" | python3 -c "import json,sys; 
 try:
@@ -153,11 +141,10 @@ except Exception:
     fi
     bash "$ROOT/scripts/install_mac_control.sh"
     echo
-    echo "Control UI: http://127.0.0.1:8090/"
-    echo "API docs:   http://127.0.0.1:8090/docs"
+    echo "Control API: http://127.0.0.1:8090/"
+    echo "API docs:    http://127.0.0.1:8090/docs"
     ;;
   models-local)
-    export COMFYUI_ROOT="${COMFYUI_ROOT:-/tmp/ai-comfy-models}"
     export LLAMACPP_MODELS="${LLAMACPP_MODELS:-/tmp/ai-llama-models}"
     python3 "$ROOT/scripts/model_status.py" "$@"
     ;;

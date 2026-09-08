@@ -3,9 +3,6 @@
 set -euo pipefail
 
 CONTROL="${AI_CONTROL:-$HOME/ai-inference/control}"
-# shellcheck disable=SC1091
-source "${CONTROL}/scripts/remote/comfy_paths.sh"
-COMFY_LTX="${COMFYUI_LTX_ROOT:-$HOME/ComfyUI-ltx}"
 LLAMA="${LLAMACPP_ROOT:-$HOME/ai-inference/llama.cpp}"
 LAN_IP="${LAN_BIND_IP:-192.168.50.100}"
 VENV="${AI_VENV:-$HOME/ai-inference/venv}"
@@ -19,15 +16,13 @@ if [[ ! -d "$CONTROL/deploy/systemd" ]]; then
 fi
 
 cp "$CONTROL/deploy/systemd/"*.service "$UNIT_DIR/"
-systemctl --user disable --now llama-slow.service 2>/dev/null || true
-rm -f "$UNIT_DIR/llama-slow.service"
+systemctl --user disable --now llama-slow.service comfyui.service comfyui-ltx.service 2>/dev/null || true
+rm -f "$UNIT_DIR/llama-slow.service" "$UNIT_DIR/comfyui.service" "$UNIT_DIR/comfyui-ltx.service"
 
-for svc in llama-fast gemma comfyui comfyui-ltx ai-control ai-download; do
+for svc in llama-fast gemma ai-control ai-download; do
   f="$UNIT_DIR/${svc}.service"
   [[ -f "$f" ]] || continue
   sed -i "s|@HOME@|$HOME|g" "$f"
-  sed -i "s|@COMFY@|$COMFY|g" "$f"
-  sed -i "s|@COMFY_LTX@|$COMFY_LTX|g" "$f"
   sed -i "s|@LLAMA@|$LLAMA|g" "$f"
   sed -i "s|@LAN_IP@|$LAN_IP|g" "$f"
   sed -i "s|@VENV@|$VENV|g" "$f"

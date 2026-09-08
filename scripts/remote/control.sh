@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# GPU box lifecycle: exactly one active profile (llama-fast | gemma | comfy | comfy-ltx | tts).
+# GPU box lifecycle: exactly one active profile (llama-fast | gemma).
 set -euo pipefail
 
 LAN_IP="${LAN_BIND_IP:-192.168.50.100}"
 LLAMA_PORT="${LLAMA_PORT:-8080}"
-COMFY_PORT="${COMFY_PORT:-8188}"
-COMFY_LTX_PORT="${COMFY_LTX_PORT:-8189}"
 CONTROL="${AI_CONTROL:-$HOME/ai-inference/control}"
 EXCLUSIVE="${CONTROL}/scripts/remote/ensure-exclusive.sh"
 
-UNITS=(llama-fast gemma comfyui comfyui-ltx)
+UNITS=(llama-fast gemma)
 
 usage() {
   cat <<EOF
-Usage: control.sh <status|start|stop|switch|models> [llama-fast|gemma|comfy|comfy-ltx|tts]
+Usage: control.sh <status|start|stop|switch|models> [llama-fast|gemma]
 EOF
   exit 1
 }
@@ -63,18 +61,6 @@ stop_all() {
   fi
 }
 
-wait_http() {
-  local url="$1"
-  local tries="${2:-60}"
-  for _ in $(seq 1 "$tries"); do
-    if curl -sf "$url" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 2
-  done
-  return 1
-}
-
 unit_failed() {
   local unit="$1"
   local state
@@ -82,24 +68,12 @@ unit_failed() {
   [[ "$state" == "failed" ]]
 }
 
-unit_log_path() {
-  local unit="$1"
-  case "$unit" in
-    comfyui) echo "${HOME}/ai-inference/logs/comfyui.log" ;;
-    comfyui-ltx) echo "${HOME}/ai-inference/logs/comfyui-ltx.log" ;;
-    llama-fast) echo "${HOME}/ai-inference/logs/llama-fast.log" ;;
-    gemma) echo "${HOME}/ai-inference/logs/gemma.log" ;;
-    *) echo "" ;;
-  esac
-}
-
 print_unit_diagnostics() {
   local unit="$1"
-  local log_path
-  log_path="$(unit_log_path "$unit")"
+  local log_path="${HOME}/ai-inference/logs/${unit}.log"
   echo "--- systemctl status ${unit}.service ---" >&2
   systemctl_user status "${unit}.service" --no-pager -n 20 >&2 || true
-  if [[ -n "$log_path" && -f "$log_path" ]]; then
+  if [[ -f "$log_path" ]]; then
     echo "--- tail ${log_path} ---" >&2
     tail -n 30 "$log_path" >&2 || true
   fi
@@ -136,22 +110,12 @@ print_urls() {
     llama-fast|gemma)
       echo "Active URL: http://${LAN_IP}:${LLAMA_PORT}/v1"
       ;;
-    comfyui|comfy)
-      echo "Active URL: http://${LAN_IP}:${COMFY_PORT}"
-      ;;
-    comfyui-ltx|comfy-ltx)
-      echo "Active URL: http://${LAN_IP}:${COMFY_LTX_PORT}"
-      ;;
     none|"")
       echo "Active URL: none (GPU idle)"
-      echo "  LLM:       http://${LAN_IP}:${LLAMA_PORT}/v1   (start llama-fast|gemma)"
-      echo "  Comfy:     http://${LAN_IP}:${COMFY_PORT}      (start comfy)"
-      echo "  Comfy LTX: http://${LAN_IP}:${COMFY_LTX_PORT} (start comfy-ltx)"
+      echo "  LLM: http://${LAN_IP}:${LLAMA_PORT}/v1   (start llama-fast|gemma)"
       ;;
     *)
-      echo "LLM:       http://${LAN_IP}:${LLAMA_PORT}/v1"
-      echo "Comfy:     http://${LAN_IP}:${COMFY_PORT}"
-      echo "Comfy LTX: http://${LAN_IP}:${COMFY_LTX_PORT}"
+      echo "LLM: http://${LAN_IP}:${LLAMA_PORT}/v1"
       ;;
   esac
 }
@@ -165,12 +129,6 @@ loaded_model_hint() {
     gemma)
       echo "Gemma 4 E4B Q4_K_M + mmproj (text + vision, 128K ctx)"
       ;;
-    comfyui)
-      echo "ComfyUI (Qwen-Image dynamic generation)"
-      ;;
-    comfyui-ltx|comfy-ltx)
-      echo "ComfyUI LTX-2.5 (text/image to video + audio)"
-      ;;
     none)
       echo "none — GPU idle"
       ;;
@@ -183,7 +141,6 @@ loaded_model_hint() {
 cmd_models() {
   if [[ -f "${CONTROL}/scripts/model_status.py" ]]; then
     source "${AI_VENV:-$HOME/ai-inference/venv}/bin/activate" 2>/dev/null || true
-    export COMFYUI_ROOT="${COMFYUI_ROOT:-$HOME/ComfyUI/models}"
     export LLAMACPP_MODELS="${LLAMACPP_MODELS:-$HOME/ai-inference/models/llamacpp}"
     export INSTALLED_JSON="${INSTALLED_JSON:-$CONTROL/catalog/installed.json}"
     python "${CONTROL}/scripts/model_status.py" "$@"
@@ -203,22 +160,6 @@ cmd_status() {
   elif [[ "$active" == CONFLICT* ]]; then
     load_state="CONFLICT"
     api_state="multiple services — exclusive GPU violated"
-  elif [[ "$active" == "comfyui" ]]; then
-    if http_ok "http://${LAN_IP}:${COMFY_PORT}/"; then
-      load_state="LOADED"
-      api_state="ready"
-    else
-      load_state="STARTING"
-      api_state="not responding"
-    fi
-  elif [[ "$active" == "comfyui-ltx" ]]; then
-    if http_ok "http://${LAN_IP}:${COMFY_LTX_PORT}/"; then
-      load_state="LOADED"
-      api_state="ready"
-    else
-      load_state="STARTING"
-      api_state="not responding"
-    fi
   else
     if http_ok "http://${LAN_IP}:${LLAMA_PORT}/v1/models" || http_ok "http://${LAN_IP}:${LLAMA_PORT}/health"; then
       load_state="LOADED"
@@ -255,46 +196,29 @@ cmd_start() {
   local target="${1:-}"
   [[ -n "$target" ]] || usage
   case "$target" in
-    llama-fast|gemma|comfy|comfy-ltx|tts) ;;
-    comfyui) target="comfy" ;;
-    comfyui-ltx) target="comfy-ltx" ;;
+    llama-fast|gemma) ;;
     *) echo "Unknown profile: $target" >&2; exit 1 ;;
   esac
 
   echo "Stopping other GPU profiles (exclusive: one model)..."
   stop_all
-  if [[ "$target" == "tts" ]]; then
-    echo "Ready (LOADED): TTS — GPU idle for in-process Chatterbox"
-    return
-  fi
-  local unit="$target"
-  [[ "$target" == "comfy" ]] && unit="comfyui"
-  [[ "$target" == "comfy-ltx" ]] && unit="comfyui-ltx"
 
-  echo "Starting ${unit} (others remain stopped)..."
-  systemctl_user start "${unit}.service"
+  echo "Starting ${target} (others remain stopped)..."
+  systemctl_user start "${target}.service"
 
   local leftover
-  leftover="$(active_units_list | grep -v "^${unit}$" || true)"
+  leftover="$(active_units_list | grep -v "^${target}$" || true)"
   if [[ -n "$leftover" ]]; then
     echo "Exclusive GPU violated; extra units still active: ${leftover}" >&2
     stop_all
     exit 1
   fi
 
-  if [[ "$target" == "comfy" || "$target" == "comfyui" ]]; then
-    wait_http_or_unit "http://${LAN_IP}:${COMFY_PORT}/" "$unit" || exit 1
-    echo "Ready (LOADED): http://${LAN_IP}:${COMFY_PORT}"
-  elif [[ "$target" == "comfy-ltx" || "$target" == "comfyui-ltx" ]]; then
-    wait_http_or_unit "http://${LAN_IP}:${COMFY_LTX_PORT}/" "$unit" || exit 1
-    echo "Ready (LOADED): http://${LAN_IP}:${COMFY_LTX_PORT}"
-  else
-    wait_http_or_unit "http://${LAN_IP}:${LLAMA_PORT}/health" "$unit" 30 || \
-    wait_http_or_unit "http://${LAN_IP}:${LLAMA_PORT}/v1/models" "$unit" 30 || {
-      exit 1
-    }
-    echo "Ready (LOADED): http://${LAN_IP}:${LLAMA_PORT}/v1"
-  fi
+  wait_http_or_unit "http://${LAN_IP}:${LLAMA_PORT}/health" "$target" 30 || \
+  wait_http_or_unit "http://${LAN_IP}:${LLAMA_PORT}/v1/models" "$target" 30 || {
+    exit 1
+  }
+  echo "Ready (LOADED): http://${LAN_IP}:${LLAMA_PORT}/v1"
 }
 
 cmd_stop() {

@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -41,9 +40,7 @@ def _safe_models_root(env_name: str, default: str) -> Path:
     return path
 
 
-COMFY_ROOT = _safe_models_root("COMFYUI_ROOT", "~/ComfyUI/models")
 LLAMA_ROOT = _safe_models_root("LLAMACPP_MODELS", "~/ai-inference/models/llamacpp")
-CHATTERBOX_ROOT = _safe_models_root("CHATTERBOX_MODELS", "~/ai-inference/models/chatterbox")
 INSTALLED = Path(os.environ.get("INSTALLED_JSON", ROOT / "catalog" / "installed.json"))
 DOWNLOAD_STATE = Path(
     os.environ.get("DOWNLOAD_STATE", os.path.expanduser("~/ai-inference/logs/download-state.json"))
@@ -109,10 +106,8 @@ def load_catalog() -> dict:
 
 
 def dest_root(dest: str) -> Path:
-    if dest == "comfyui":
-        return COMFY_ROOT
-    if dest == "chatterbox":
-        return CHATTERBOX_ROOT
+    if dest != "llamacpp":
+        raise RuntimeError(f"Unsupported dest {dest!r}; this downloader only fetches llamacpp GGUFs")
     return LLAMA_ROOT
 
 
@@ -284,14 +279,6 @@ def main() -> int:
                     "dest": model["dest"],
                     "files": files_meta,
                 }
-                if mid == "ltx-2.5-distilled":
-                    link_script = ROOT / "scripts" / "remote" / "link_ltx_checkpoints.sh"
-                    if link_script.is_file():
-                        subprocess.run(
-                            ["bash", str(link_script)],
-                            check=False,
-                            env={**os.environ, "COMFYUI_MODELS": str(COMFY_ROOT)},
-                        )
 
         if not args.dry_run:
             INSTALLED.parent.mkdir(parents=True, exist_ok=True)

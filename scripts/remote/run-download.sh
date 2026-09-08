@@ -34,17 +34,15 @@ _sanitize_path_var() {
   printf -v "$name" '%s' "$val"
 }
 
-_sanitize_path_var COMFYUI_ROOT
 _sanitize_path_var LLAMACPP_MODELS
 _sanitize_path_var HF_HOME
 
-export COMFYUI_ROOT="${COMFYUI_ROOT:-$HOME/ComfyUI/models}"
 export LLAMACPP_MODELS="${LLAMACPP_MODELS:-$HOME/ai-inference/models/llamacpp}"
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
 export INSTALLED_JSON="${INSTALLED_JSON:-$CONTROL/catalog/installed.json}"
 export DOWNLOAD_STATE="${LOGS}/download-state.json"
 
-mkdir -p "$LOGS" "$CONFIG" "$COMFYUI_ROOT" "$LLAMACPP_MODELS" "$HF_HOME"
+mkdir -p "$LOGS" "$CONFIG" "$LLAMACPP_MODELS" "$HF_HOME"
 cd "$CONTROL"
 
 extra=()

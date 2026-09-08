@@ -74,8 +74,7 @@ if url:
 else:
     eps = s.get('endpoints', {})
     print("Active URL: none (GPU idle)")
-    print(f"  LLM:   {eps.get('llm')}   (start llama-fast|gemma)")
-    print(f"  Comfy: {eps.get('comfy')}      (start comfy)")
+    print(f"  LLM: {eps.get('llm')}   (start llama-fast|gemma)")
 print()
 print("--- services ---")
 for k, v in (s.get('services') or {}).items():

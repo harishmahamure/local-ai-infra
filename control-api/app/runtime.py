@@ -11,6 +11,7 @@ from typing import Any
 from . import config
 
 _CONTROL_TIMEOUT_SEC = 180
+UNITS = ("llama-fast", "gemma")
 
 
 def _run_control(*args: str, check: bool = True, timeout: int = _CONTROL_TIMEOUT_SEC) -> subprocess.CompletedProcess[str]:
@@ -73,7 +74,7 @@ def _gpu_processes() -> list[dict[str, str]]:
 
 def _service_states() -> dict[str, str]:
     states: dict[str, str] = {}
-    for unit in ("llama-fast", "gemma", "comfyui", "comfyui-ltx"):
+    for unit in UNITS:
         proc = subprocess.run(
             ["systemctl", "--user", "is-active", f"{unit}.service"],
             capture_output=True,
@@ -94,10 +95,8 @@ def _active_profile(services: dict[str, str]) -> str:
 
 def _model_hint(profile: str) -> str:
     hints = {
-        "gemma": "Gemma 4 E4B Q4 + mmproj (text + vision planner, 128K ctx)",
+        "gemma": "Gemma 4 E4B Q4 + mmproj (text + vision, 128K ctx)",
         "llama-fast": "Qwen3.6-35B-A3B RotorQuant Q4 + mmproj (text + vision, 262K ctx)",
-        "comfyui": "ComfyUI (Qwen-Image dynamic generation)",
-        "comfyui-ltx": "ComfyUI LTX-2.5 (video + synchronized audio)",
         "none": "none — GPU idle",
     }
     if profile.startswith("CONFLICT"):
@@ -113,6 +112,7 @@ def _http_ok(url: str) -> bool:
 def get_status() -> dict[str, Any]:
     services = _service_states()
     profile = _active_profile(services)
+    llm_url = f"http://{config.LAN_IP}:{config.LLAMA_PORT}/v1"
 
     if profile == "none":
         load_state = "STOPPED"
@@ -122,25 +122,7 @@ def get_status() -> dict[str, Any]:
         load_state = "CONFLICT"
         api_state = "multiple services — exclusive GPU violated"
         active_url = None
-    elif profile == "comfyui":
-        url = f"http://{config.LAN_IP}:{config.COMFY_PORT}/"
-        if _http_ok(url):
-            load_state = "LOADED"
-            api_state = "ready"
-        else:
-            load_state = "STARTING"
-            api_state = "not responding"
-        active_url = f"http://{config.LAN_IP}:{config.COMFY_PORT}"
-    elif profile == "comfyui-ltx":
-        url = f"http://{config.LAN_IP}:{config.COMFY_LTX_PORT}/"
-        if _http_ok(url):
-            load_state = "LOADED"
-            api_state = "ready"
-        else:
-            load_state = "STARTING"
-            api_state = "not responding"
-        active_url = f"http://{config.LAN_IP}:{config.COMFY_LTX_PORT}"
-    elif profile == "gemma":
+    else:
         base = f"http://{config.LAN_IP}:{config.LLAMA_PORT}"
         if _http_ok(f"{base}/health") or _http_ok(f"{base}/v1/models"):
             load_state = "LOADED"
@@ -148,16 +130,7 @@ def get_status() -> dict[str, Any]:
         else:
             load_state = "STARTING"
             api_state = "not responding"
-        active_url = f"{base}/v1"
-    else:
-        base = f"http://{config.LAN_IP}:{config.LLAMA_PORT}"
-        if _http_ok(f"{base}/v1/models") or _http_ok(f"{base}/health"):
-            load_state = "LOADED"
-            api_state = "ready"
-        else:
-            load_state = "STARTING"
-            api_state = "not responding"
-        active_url = f"{base}/v1"
+        active_url = llm_url
 
     return {
         "exclusive": True,
@@ -167,9 +140,7 @@ def get_status() -> dict[str, Any]:
         "apiState": api_state,
         "activeUrl": active_url,
         "endpoints": {
-            "llm": f"http://{config.LAN_IP}:{config.LLAMA_PORT}/v1",
-            "comfy": f"http://{config.LAN_IP}:{config.COMFY_PORT}",
-            "comfyLtx": f"http://{config.LAN_IP}:{config.COMFY_LTX_PORT}",
+            "llm": llm_url,
             "control": f"http://{config.LAN_IP}:{config.CONTROL_PORT}",
         },
         "services": services,
@@ -181,15 +152,6 @@ def get_status() -> dict[str, Any]:
 def start_profile(profile_id: str) -> dict[str, Any]:
     if profile_id not in config.VALID_PROFILES:
         raise ValueError(f"Unknown profile: {profile_id}")
-    if profile_id == "tts":
-        stop_profile()
-        status = get_status()
-        status["profile"] = "tts"
-        status["loadState"] = "LOADED"
-        status["apiState"] = "in-process"
-        status["model"] = "Chatterbox multilingual TTS (in-process)"
-        status["activeUrl"] = None
-        return status
     proc = _run_control("start", profile_id, check=False)
     if proc.returncode != 0:
         parts = [p for p in (proc.stdout.strip(), proc.stderr.strip()) if p]
@@ -205,15 +167,8 @@ def wait_for_profile(
     poll_sec: float = 2.0,
 ) -> dict[str, Any]:
     """Poll until the requested profile is LOADED or timeout/failure."""
-    if profile_id == "tts":
-        return start_profile("tts")
-    unit_map = {
-        "comfy": "comfyui",
-        "comfy-ltx": "comfyui-ltx",
-        "llama-fast": "llama-fast",
-        "gemma": "gemma",
-    }
-    unit = unit_map.get(profile_id, profile_id)
+    if profile_id not in config.VALID_PROFILES:
+        raise ValueError(f"Unknown profile: {profile_id}")
     deadline = time.monotonic() + timeout_sec
     last: dict[str, Any] = {}
 
@@ -226,15 +181,11 @@ def wait_for_profile(
             raise RuntimeError(f"GPU profile conflict: {profile}")
 
         services = last.get("services") or {}
-        if services.get(unit) == "failed":
-            raise RuntimeError(f"{unit} service failed to start (check logs on GPU box)")
+        if services.get(profile_id) == "failed":
+            raise RuntimeError(f"{profile_id} service failed to start (check logs on GPU box)")
 
-        if profile == unit and load_state == "LOADED":
+        if profile == profile_id and load_state == "LOADED":
             return last
-
-        if load_state == "STARTING" or services.get(unit) in {"activating", "active"}:
-            threading.Event().wait(poll_sec)
-            continue
 
         threading.Event().wait(poll_sec)
 
@@ -281,8 +232,6 @@ def get_models() -> dict[str, Any]:
 
 def _model_env() -> dict[str, str]:
     env = os.environ.copy()
-    env.setdefault("COMFYUI_ROOT", str(Path.home() / "ComfyUI" / "models"))
     env.setdefault("LLAMACPP_MODELS", str(Path.home() / "ai-inference" / "models" / "llamacpp"))
-    env.setdefault("CHATTERBOX_MODELS", str(Path.home() / "ai-inference" / "models" / "chatterbox"))
     env.setdefault("INSTALLED_JSON", str(config.ROOT / "catalog" / "installed.json"))
     return env

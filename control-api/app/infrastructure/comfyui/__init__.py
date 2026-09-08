@@ -1,1 +1,0 @@
-"""ComfyUI infrastructure adapter."""
