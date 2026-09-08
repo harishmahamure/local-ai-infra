@@ -36,6 +36,8 @@ def test_operations_and_capabilities() -> None:
     ops = client.get("/v1/operations").json()["operations"]
     ids = {item["id"] for item in ops}
     assert "image.generate" in ids
+    generate = next(item for item in ops if item["id"] == "image.generate")
+    assert "face_lock" in generate["presets"]
     assert "audio.tts" in ids
     assert "audio.music" in ids
     assert "audio.foley" in ids
@@ -276,6 +278,30 @@ def test_legacy_generate_flow_validates() -> None:
     ok = client.post("/api/v1/generate", json={"flow": "t2i", "prompt": "a quiet harbor"})
     assert ok.status_code == 202, ok.text
     assert ok.json().get("jobId")
+    img2img_missing = client.post("/api/v1/generate", json={"flow": "img2img", "prompt": "same person", "denoise": 0.65})
+    assert img2img_missing.status_code == 422
+    png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    img2img_ok = client.post(
+        "/api/v1/generate",
+        json={"flow": "img2img", "prompt": "same person, new lighting", "image": png, "denoise": 0.65},
+    )
+    assert img2img_ok.status_code == 202, img2img_ok.text
+    character_missing = client.post(
+        "/api/v1/generate",
+        json={"flow": "character", "prompt": "same man in steel armor, dusk courtyard"},
+    )
+    assert character_missing.status_code == 422
+    character_ok = client.post(
+        "/api/v1/generate",
+        json={
+            "flow": "character",
+            "prompt": "same man in steel armor, dusk courtyard",
+            "image": png,
+        },
+    )
+    assert character_ok.status_code == 202, character_ok.text
+    no_prompt = client.post("/api/v1/generate", json={"flow": "character", "image": png, "prompt": ""})
+    assert no_prompt.status_code == 422
 
 
 def test_legacy_status_still_present() -> None:

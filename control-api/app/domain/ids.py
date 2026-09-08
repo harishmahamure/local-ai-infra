@@ -30,3 +30,15 @@ def new_asset_id() -> str:
 
 def new_trace_id() -> str:
     return f"tr_{ulid()}"
+
+
+def new_attempt_id() -> str:
+    return f"att_{ulid()}"
+
+
+def new_batch_id() -> str:
+    return f"bat_{ulid()}"
+
+
+def new_worker_id() -> str:
+    return f"wrk_{ulid()}"

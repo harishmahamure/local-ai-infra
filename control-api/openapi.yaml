@@ -1389,7 +1389,7 @@ components:
         flow:
           anyOf:
           - type: string
-            pattern: ^(t2i|text_edit|merge|semantic_edit|layered|control|lightning)$
+            pattern: ^(t2i|img2img|character|text_edit|merge|semantic_edit|layered|control|lightning)$
           - type: 'null'
           title: Flow
         controlType:
@@ -1460,6 +1460,14 @@ components:
           - type: 'null'
           title: Upscale
           description: Omit or null for auto; true/false to override
+        denoise:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Denoise
+          description: Img2img/character denoise (0–1); img2img default 0.65, character default 0.40
       type: object
       title: GenerateRequest
     HTTPValidationError:
@@ -1819,6 +1827,13 @@ components:
           - type: 'null'
           title: Upscale
           description: Omit or null for auto; true/false to override
+        denoise:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Denoise
       type: object
       title: PromptItem
     RetryJobRequest:
@@ -1855,7 +1870,7 @@ components:
         preset:
           type: string
           title: Preset
-          description: draft | balanced | master | character_master | …
+          description: draft | balanced | master | character_master | face_lock | …
           default: master
         inputs:
           additionalProperties: true

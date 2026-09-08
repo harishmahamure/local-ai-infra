@@ -57,6 +57,7 @@ class PromptItem(BaseModel):
     fastGenMode: bool | None = None
     steps: int | None = Field(None, description='Omit or null for auto; integer to override')
     upscale: bool | None = Field(None, description='Omit or null for auto; true/false to override')
+    denoise: float | None = Field(None, ge=0.0, le=1.0)
 
 
 class GenerateRequest(BaseModel):
@@ -64,7 +65,7 @@ class GenerateRequest(BaseModel):
     image: str | None = Field(None, description="Optional base64 or data URL reference image")
     images: list[str] | None = Field(None, description="Extra references for merge (2–3) or extra uploads")
     plan: dict[str, Any] | None = Field(None, description="Explicit plan; skips the Gemma planner")
-    flow: str | None = Field(None, pattern="^(t2i|text_edit|merge|semantic_edit|layered|control|lightning)$")
+    flow: str | None = Field(None, pattern="^(t2i|img2img|character|text_edit|merge|semantic_edit|layered|control|lightning)$")
     controlType: str | None = Field(None, pattern="^(pose|depth|canny)$")
     controlStrength: float | None = Field(None, ge=0.0, le=2.0)
     layers: int | None = Field(None, ge=1, le=8)
@@ -76,6 +77,7 @@ class GenerateRequest(BaseModel):
     fastGenMode: bool | None = Field(None, description="Omit or null for auto; true forces Lightning 4-step")
     steps: int | None = Field(None, description="Omit or null for auto; integer to override")
     upscale: bool | None = Field(None, description="Omit or null for auto; true/false to override")
+    denoise: float | None = Field(None, ge=0.0, le=1.0, description="Img2img/character denoise (0–1); img2img default 0.65, character default 0.40")
 
 
 class UpscaleRequest(BaseModel):
@@ -233,6 +235,7 @@ def api_generate_post(body: GenerateRequest, request: Request):
             control_type=body.controlType,
             control_strength=body.controlStrength,
             layers=body.layers,
+            denoise=body.denoise,
         )
     except generate_module.GenerateError as exc:
         return _error(exc.status, exc.code, exc.message, request)

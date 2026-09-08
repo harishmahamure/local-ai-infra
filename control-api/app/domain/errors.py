@@ -5,6 +5,12 @@ from enum import Enum
 from typing import Any
 
 
+class RetryCategory(str, Enum):
+    RETRYABLE = "retryable"
+    NON_RETRYABLE = "non_retryable"
+    OOM = "oom"
+
+
 class ErrorCode(str, Enum):
     INVALID_REQUEST = "INVALID_REQUEST"
     INVALID_PARAMETER = "INVALID_PARAMETER"
@@ -30,15 +36,33 @@ class ErrorCode(str, Enum):
     CANCELLED = "CANCELLED"
     IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
     INTERNAL_ERROR = "INTERNAL_ERROR"
+    GPU_OOM = "GPU_OOM"
+    STAGE_TIMEOUT = "STAGE_TIMEOUT"
+    LEASE_LOST = "LEASE_LOST"
+    DEPENDENCY_FAILED = "DEPENDENCY_FAILED"
+    WORKER_LOST = "WORKER_LOST"
+    ARTIFACT_PERSIST_FAILED = "ARTIFACT_PERSIST_FAILED"
 
     @property
-    def retryable(self) -> bool:
-        return self in {
+    def retry_category(self) -> RetryCategory:
+        if self == ErrorCode.GPU_OOM:
+            return RetryCategory.OOM
+        if self in {
             ErrorCode.COMFYUI_UNAVAILABLE,
             ErrorCode.GENERATION_TIMEOUT,
             ErrorCode.MODEL_DOWNLOAD_FAILED,
             ErrorCode.INTERNAL_ERROR,
-        }
+            ErrorCode.STAGE_TIMEOUT,
+            ErrorCode.LEASE_LOST,
+            ErrorCode.WORKER_LOST,
+            ErrorCode.ARTIFACT_PERSIST_FAILED,
+        }:
+            return RetryCategory.RETRYABLE
+        return RetryCategory.NON_RETRYABLE
+
+    @property
+    def retryable(self) -> bool:
+        return self.retry_category == RetryCategory.RETRYABLE
 
     @property
     def http_status(self) -> int:
@@ -67,6 +91,12 @@ class ErrorCode(str, Enum):
             ErrorCode.CANCELLED: 409,
             ErrorCode.IDEMPOTENCY_CONFLICT: 409,
             ErrorCode.INTERNAL_ERROR: 500,
+            ErrorCode.GPU_OOM: 507,
+            ErrorCode.STAGE_TIMEOUT: 504,
+            ErrorCode.LEASE_LOST: 503,
+            ErrorCode.DEPENDENCY_FAILED: 409,
+            ErrorCode.WORKER_LOST: 503,
+            ErrorCode.ARTIFACT_PERSIST_FAILED: 500,
         }
         return mapping[self]
 

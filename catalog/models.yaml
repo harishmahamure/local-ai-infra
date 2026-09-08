@@ -14,7 +14,7 @@ models:
     estimated_vram: 20
     supported_operations: [image.generate]
     runtime: comfyui
-    recommended_presets: [draft, balanced, master, character_master]
+    recommended_presets: [draft, balanced, master, character_master, face_lock]
     enabled: true
     files:
       - repo: Comfy-Org/Qwen-Image_ComfyUI

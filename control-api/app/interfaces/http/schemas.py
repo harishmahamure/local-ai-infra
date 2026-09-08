@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class SubmitJobRequest(BaseModel):
     operation: str = Field(..., description="Catalog operation id, e.g. image.generate, video.generate, video.lipsync")
-    preset: str = Field("master", description="draft | balanced | master | character_master | …")
+    preset: str = Field("master", description="draft | balanced | master | character_master | face_lock | …")
     inputs: dict[str, Any] = Field(
         default_factory=dict,
         description="Operation inputs. Use {asset_id} objects for files, not filesystem paths.",

@@ -72,6 +72,11 @@ class ComfyUIExecutor:
             plan["image_name"] = uploaded.get("name") or uploaded.get("filename") or f"{job.job_id}.png"
         if workflow.builder in {"qwen_edit", "qwen_control", "qwen_layered"}:
             self._upload_qwen_assets(client, job.job_id, request.input_files, plan, workflow.builder)
+        elif workflow.builder == "qwen_txt2img":
+            image_bytes = request.input_files.get("image")
+            if image_bytes:
+                uploaded = client.upload_image(image_bytes, f"{job.job_id}.png")
+                plan["image_name"] = uploaded.get("name") or uploaded.get("filename") or f"{job.job_id}.png"
         if workflow.builder.startswith("ltx_"):
             self._upload_ltx_assets(client, job.job_id, request.input_files, plan)
 
@@ -193,7 +198,7 @@ class ComfyUIExecutor:
         try:
             queued = client.queue_prompt(graph, client_id=client_id)
         except Exception as exc:
-            raise DomainError(ErrorCode.COMFYUI_ERROR, str(exc)) from exc
+            raise DomainError(ErrorCode.COMFYUI_ERROR, qwen_graph.format_controlnet_comfy_error(str(exc))) from exc
         prompt_id = queued.get("prompt_id")
         if not prompt_id:
             raise DomainError(ErrorCode.COMFYUI_ERROR, "ComfyUI did not return prompt_id")
@@ -220,7 +225,8 @@ class ComfyUIExecutor:
                     continue
                 if _history_failed(entry):
                     status = entry.get("status") or {}
-                    raise DomainError(ErrorCode.COMFYUI_ERROR, str(status.get("messages") or "ComfyUI execution error"))
+                    detail = str(status.get("messages") or "ComfyUI execution error")
+                    raise DomainError(ErrorCode.COMFYUI_ERROR, qwen_graph.format_controlnet_comfy_error(detail))
                 files = _collect_files(entry.get("outputs") or {})
                 if files:
                     return self._fetch_outputs(client, files)

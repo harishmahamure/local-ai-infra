@@ -3,8 +3,16 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from ...application.image_flows import FlowError, domain_flow_error, resolve_flow_plan
+from ...application.image_flows import (
+    DEFAULT_CHARACTER_DENOISE,
+    DEFAULT_IMG2IMG_DENOISE,
+    FlowError,
+    compose_face_lock_prompts,
+    domain_flow_error,
+    resolve_flow_plan,
+)
 from ...application.resolvers import resolve_dimensions
+from ...domain.errors import DomainError, ErrorCode
 from ...domain.jobs import Job
 from ...domain.presets import Preset
 from ...domain.workflows import WorkflowDefinition
@@ -52,7 +60,7 @@ def _qwen_txt2img(job: Job, preset: Preset, loras: list[dict[str, Any]]) -> dict
     graph_loras = [{"name": item["name"], "strength": item["strength"]} for item in loras]
     if preset.id == "draft" and not graph_loras:
         graph_loras = [{"name": "Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors", "strength": 1.0}]
-    return {
+    plan: dict[str, Any] = {
         "mode": "txt2img",
         "prompt": str(job.inputs.get("prompt") or ""),
         "negative_prompt": str(job.inputs.get("negative_prompt") or job.parameters.get("negative_prompt") or ""),
@@ -65,6 +73,24 @@ def _qwen_txt2img(job: Job, preset: Preset, loras: list[dict[str, Any]]) -> dict
         "upscale": False,
         "filename_prefix": "engine",
     }
+    face_lock = preset.id == "face_lock"
+    if face_lock:
+        plan["prompt"], plan["negative_prompt"] = compose_face_lock_prompts(
+            str(job.inputs.get("prompt") or ""),
+            str(job.inputs.get("negative_prompt") or job.parameters.get("negative_prompt") or ""),
+        )
+    has_image = bool(job.inputs.get("image") or job.inputs.get("reference_images"))
+    if face_lock and not has_image:
+        raise DomainError(ErrorCode.INVALID_REQUEST, "face_lock requires a reference image")
+    if has_image:
+        denoise = job.inputs.get("denoise")
+        if denoise is None:
+            denoise = job.parameters.get("denoise")
+        if denoise is None:
+            denoise = preset.parameters.get("denoise")
+        default = DEFAULT_CHARACTER_DENOISE if face_lock else DEFAULT_IMG2IMG_DENOISE
+        plan["denoise"] = float(denoise) if denoise is not None else default
+    return plan
 
 
 def _reference_count(job: Job) -> int:

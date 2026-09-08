@@ -97,6 +97,12 @@ def _count_item_outcomes(items: list[dict[str, Any]]) -> tuple[int, int]:
     return completed, failed
 
 
+def _error_from_items(items: list[dict[str, Any]], *, completed: int) -> str | None:
+    if completed > 0:
+        return None
+    return next((it.get("error") for it in items if it.get("error")), None)
+
+
 def _job_status_from_items(items: list[dict[str, Any]]) -> str:
     completed, failed = _count_item_outcomes(items)
     total = len(items)
@@ -215,6 +221,7 @@ def _normalize_items(
     control_type: str | None = None,
     control_strength: float | None = None,
     layers: int | None = None,
+    denoise: float | None = None,
 ) -> list[dict[str, Any]]:
     """Build normalized job items from prompts[] or prompt+count shorthand."""
     if prompts:
@@ -258,6 +265,7 @@ def _normalize_items(
                     "controlType": raw.get("controlType", control_type),
                     "controlStrength": raw.get("controlStrength", control_strength),
                     "layers": raw.get("layers", layers),
+                    "denoise": raw.get("denoise", denoise),
                     "seed": raw.get("seed"),
                     "width": raw.get("width"),
                     "height": raw.get("height"),
@@ -291,6 +299,7 @@ def _normalize_items(
                 "controlType": control_type,
                 "controlStrength": control_strength,
                 "layers": layers,
+                "denoise": denoise,
                 "seed": item_seed,
                 "width": width,
                 "height": height,
@@ -353,6 +362,7 @@ def _ensure_comfy_loaded() -> None:
         )
     if not comfy_client.is_ready():
         raise GenerateError("COMFY_NOT_LOADED", "ComfyUI is not responding on port 8188", 409)
+    comfy_client.get_object_info(refresh=True)
 
 
 def _start_planner(*, has_image: bool) -> str:
@@ -394,54 +404,36 @@ def _resolve_image_name(image_field: str | None) -> str | None:
     return suggested
 
 
-_CONTROL_PREPROCESSORS: dict[str, tuple[str, ...]] = {
-    "pose": ("DWPreprocessor", "OpenposePreprocessor"),
-    "depth": ("DepthAnythingV2Preprocessor", "MiDaS Depth Approximation"),
-    "canny": ("Canny",),
-}
+def _available_comfy_nodes(*, refresh: bool = False) -> set[str]:
+    try:
+        return set(comfy_client.get_object_info(refresh=refresh).keys())
+    except Exception:
+        return set()
 
 
-def _control_preprocessor_available(control_type: str | None) -> bool:
-    for node in _CONTROL_PREPROCESSORS.get(control_type or "pose", ()):
-        if comfy_client.has_node(node):
-            return True
-    return False
+def _control_aux_ready() -> bool:
+    """Pose or depth preprocessor is required; Canny-only is not enough to enable the card."""
+    if not comfy_client.is_ready():
+        return True
+    available = _available_comfy_nodes()
+    pose_ok = any(name in available for name in qwen_graph.CONTROL_PREPROCESSORS["pose"])
+    depth_ok = any(name in available for name in qwen_graph.CONTROL_PREPROCESSORS["depth"])
+    return pose_ok or depth_ok
 
 
-def _resolve_depth_control_type() -> str | None:
-    if comfy_client.has_node("DepthAnythingV2Preprocessor"):
-        return "depth"
-    if comfy_client.has_node("MiDaS Depth Approximation"):
-        return "depth_midas"
-    return None
-
-
-def _adjust_plan_for_comfy(plan: dict[str, Any], *, has_image: bool) -> dict[str, Any]:
-    """Downgrade unsupported control graphs; prefer img2img when preprocessors are missing."""
+def _resolve_control_plan(plan: dict[str, Any]) -> dict[str, Any]:
     adjusted = copy.deepcopy(plan)
-    if not has_image or adjusted.get("mode") != "control":
-        return adjusted
-
     control_type = adjusted.get("control_type") or "pose"
-    if control_type == "depth":
-        resolved = _resolve_depth_control_type()
-        if resolved:
-            adjusted["control_type"] = resolved
-            return adjusted
-
-    if _control_preprocessor_available(control_type):
-        return adjusted
-
-    # Pose/depth preprocessors are not installed on this ComfyUI box.
-    adjusted["mode"] = "txt2img"
-    adjusted.setdefault("denoise", 0.75)
-    adjusted.pop("control_type", None)
-    adjusted.pop("control_strength", None)
-    notes = adjusted.setdefault("runtime_notes", [])
-    if isinstance(notes, list):
-        notes.append(
-            f"Control mode ({control_type}) unavailable on ComfyUI; fell back to img2img."
-        )
+    available = _available_comfy_nodes(refresh=True)
+    try:
+        node = qwen_graph.select_control_preprocessor(control_type, available)
+    except ValueError as exc:
+        raise GenerateError("WORKFLOW_INVALID", str(exc), 409) from exc
+    adjusted["preprocessor_node"] = node
+    if node == "MiDaS Depth Approximation":
+        adjusted["control_type"] = "depth_midas"
+    elif node == "DepthAnythingV2Preprocessor":
+        adjusted["control_type"] = "depth"
     return adjusted
 
 
@@ -498,6 +490,7 @@ def _plan_item(item: dict[str, Any]) -> dict[str, Any]:
                 height=item.get("height"),
                 seed=item.get("seed"),
                 upscale=upscale_override,
+                denoise=item.get("denoise"),
             )
         except image_flows.FlowError as exc:
             raise GenerateError("VALIDATION_ERROR", str(exc), 422) from exc
@@ -590,7 +583,11 @@ def _execute_comfy_batch(
     """Queue one graph, poll until done, persist outputs to disk."""
     graph = qwen_graph.build(plan)
     client_id = str(uuid.uuid4())
-    queued = comfy_client.queue_prompt(graph, client_id=client_id)
+    try:
+        queued = comfy_client.queue_prompt(graph, client_id=client_id)
+    except Exception as exc:
+        detail = qwen_graph.format_controlnet_comfy_error(str(exc))
+        raise GenerateError("QUEUE_FAILED", detail, 500) from exc
     prompt_id = queued.get("prompt_id")
     if not prompt_id:
         raise GenerateError("QUEUE_FAILED", "ComfyUI did not return prompt_id", 500)
@@ -616,9 +613,10 @@ def _execute_comfy_batch(
         state = _history_entry_status(entry)
         if state == "failed":
             status = entry.get("status") or {}
+            detail = str(status.get("messages") or "ComfyUI execution error")
             raise GenerateError(
                 "COMFY_EXEC_FAILED",
-                str(status.get("messages") or "ComfyUI execution error"),
+                qwen_graph.format_controlnet_comfy_error(detail),
                 500,
             )
 
@@ -745,18 +743,16 @@ def _run_job(job_id: str) -> None:
                 plan_i["image_names"] = uploaded
                 if plan_i.get("mode") == "layered":
                     _ensure_layered_nodes()
-                if item.get("flow") == "control":
+                if plan_i.get("mode") == "control":
                     if not image_name:
                         raise GenerateError("VALIDATION_ERROR", "control requires a guide image", 422)
-                    plan_i = _adjust_plan_for_comfy(plan_i, has_image=True)
-                    if plan_i.get("mode") != "control":
-                        raise GenerateError(
-                            "WORKFLOW_INVALID",
-                            "Control preprocessor nodes are missing on ComfyUI",
-                            409,
-                        )
-                else:
-                    plan_i = _adjust_plan_for_comfy(plan_i, has_image=bool(image_name))
+                    plan_i = _resolve_control_plan(plan_i)
+                elif item.get("flow") in ("img2img", "character") and not image_name:
+                    raise GenerateError(
+                        "VALIDATION_ERROR",
+                        f"{item.get('flow')} requires a reference image",
+                        422,
+                    )
                 batch_images = _execute_comfy_batch(job_id, plan_i, item["index"], total)
                 item["images"] = batch_images
                 item["status"] = "completed"
@@ -777,7 +773,7 @@ def _run_job(job_id: str) -> None:
                 status=final_status if (completed + failed) >= total else "running",
                 phase="done" if (completed + failed) >= total else f"running {completed + failed}/{total}",
                 finishedAt=_now() if (completed + failed) >= total else None,
-                error=None if completed > 0 else job.get("error"),
+                error=_error_from_items(items, completed=completed),
             )
 
     except GenerateError as exc:
@@ -804,6 +800,7 @@ def submit(
     control_type: str | None = None,
     control_strength: float | None = None,
     layers: int | None = None,
+    denoise: float | None = None,
 ) -> dict[str, Any]:
     items = _normalize_items(
         prompts=prompts,
@@ -822,6 +819,7 @@ def submit(
         control_type=control_type,
         control_strength=control_strength,
         layers=layers,
+        denoise=denoise,
     )
     for item in items:
         if not item.get("flow") or item.get("explicitPlan"):
@@ -900,6 +898,8 @@ def get_capabilities() -> dict[str, Any]:
     flows = []
     for spec in image_flows.flow_catalog():
         ready = all(bmap.get(b, {}).get("status") == "complete" for b in spec["bundles"])
+        if spec["id"] == "control":
+            ready = ready and _control_aux_ready()
         flows.append({**spec, "ready": ready})
     loras = [
         {"id": "lightning", "file": presets.LORA["lightning"], "bundle": "qwen-image-2512-lightning-lora"},

@@ -90,6 +90,8 @@ const GEN_ASPECTS = {
 
 const GEN_FLOWS = [
   { id: "t2i", label: "Text-to-Image", hint: "Describe a scene. Default 1920×1080 unless you pick another aspect.", fields: ["prompt", "size", "batch", "upscale"], promptRequired: true, placeholder: "A sunlit kitchen, steam rising from a copper kettle, 35mm still." },
+  { id: "img2img", label: "Image-to-Image", hint: "Vary a reference still while keeping identity and composition.", fields: ["prompt", "image1", "size", "batch", "denoise", "upscale"], promptRequired: true, placeholder: "Same person, three-quarter view, evening light, keep face and wardrobe." },
+  { id: "character", label: "Character (face lock)", hint: "Upload a face photo and describe the full new picture. Same face; new body, clothes, and scene. Lower denoise keeps the likeness.", fields: ["prompt", "image1", "size", "batch", "denoise", "upscale"], promptRequired: true, placeholder: "Full-body cinematic still of the same man as a Maratha cavalry officer, rust-red turban, steel chest plate, dusk courtyard, 9:16." },
   { id: "text_edit", label: "In-image text edit", hint: "Change signage, labels, or printed text on one image.", fields: ["prompt", "image1"], promptRequired: true, placeholder: "Change the storefront sign to say OPEN LATE." },
   { id: "merge", label: "Multi-image merge", hint: "Combine 2–3 references: character, garment, optional background.", fields: ["prompt", "image1", "image2", "image3"], promptRequired: true, placeholder: "The person from image 1 wearing the jacket from image 2, standing in the scene from image 3." },
   { id: "semantic_edit", label: "Semantic instruction edit", hint: "Relight, reframe, or restyle one image with a natural-language instruction.", fields: ["prompt", "image1"], promptRequired: true, placeholder: "Warm golden-hour lighting, slight push-in, keep the same person and wardrobe." },
@@ -108,6 +110,7 @@ const LTX_MODE_CARDS = [
 ];
 
 let selectedGenFlow = "t2i";
+let lastDenoiseFlow = null;
 
 const IMAGE_BUNDLES = [
   "qwen-image-2512-fp8",
@@ -259,6 +262,8 @@ function updateGenFlowUi() {
   if ($("#genPrompt")) $("#genPrompt").placeholder = spec.placeholder || "";
   const labels = {
     t2i: "Prompt",
+    img2img: "Prompt",
+    character: "Full image description",
     lightning: "Prompt",
     text_edit: "Text instruction",
     semantic_edit: "Semantic instruction",
@@ -268,6 +273,8 @@ function updateGenFlowUi() {
   };
   if ($("#genPromptLabel")) $("#genPromptLabel").textContent = labels[spec.id] || "Prompt";
   const imageLabels = {
+    img2img: "Reference image",
+    character: "Face photo",
     text_edit: "Image to edit",
     semantic_edit: "Image to edit",
     merge: "Image 1 — character / identity",
@@ -280,11 +287,30 @@ function updateGenFlowUi() {
     const on = spec.fields.includes(key);
     el.style.display = on ? "block" : "none";
     const required = (key === "prompt" && spec.promptRequired)
-      || (key === "image1" && ["text_edit", "semantic_edit", "merge", "layered", "control"].includes(spec.id))
+      || (key === "image1" && ["img2img", "character", "text_edit", "semantic_edit", "merge", "layered", "control"].includes(spec.id))
       || (key === "image2" && spec.id === "merge");
     el.dataset.required = required ? "1" : "0";
   });
   if ($("#genSubmit")) $("#genSubmit").disabled = !ready;
+  const denoiseInput = $("#genDenoise");
+  const denoiseHint = $("#genDenoiseHint");
+  const denoiseLabel = $("#genDenoiseLabel");
+  if (denoiseInput && spec.fields.includes("denoise")) {
+    if (lastDenoiseFlow !== spec.id) {
+      denoiseInput.value = spec.id === "character" ? "0.40" : "0.65";
+      lastDenoiseFlow = spec.id;
+    }
+    if (spec.id === "character") {
+      if (denoiseLabel) denoiseLabel.textContent = "Denoise (lower = stronger face lock)";
+      if (denoiseHint) {
+        denoiseHint.hidden = false;
+        denoiseHint.textContent = "0.25–0.55 typical. Lower keeps the face; higher changes the scene more.";
+      }
+    } else {
+      if (denoiseLabel) denoiseLabel.textContent = "Denoise (0–1)";
+      if (denoiseHint) denoiseHint.hidden = true;
+    }
+  }
 }
 
 function renderLtxModeCards() {
@@ -683,6 +709,12 @@ function renderJobProgress(el, job, fallbackEndpoint) {
     }).join("")}</div>`;
 }
 
+function jobFailureMessage(job) {
+  if (job.error) return job.error;
+  const failed = (job.items || []).find(it => it.error);
+  return failed?.error || "Generation failed";
+}
+
 function genProgressLabel(job) {
   const total = job.count || 1;
   const done = job.completedCount || (job.images?.length || 0);
@@ -716,9 +748,9 @@ async function pollGenerateJob(jobId) {
       genPollTimer = null;
       $("#genSubmit").disabled = false;
       if (!job.images?.length) {
-        $("#genOutput").textContent = job.error || "Generation failed";
+        $("#genOutput").textContent = jobFailureMessage(job);
       }
-      toast(job.error || "Generation failed");
+      toast(jobFailureMessage(job));
     }
   } catch (err) {
     const done = $("#genStatus").textContent;
@@ -744,7 +776,7 @@ async function submitGenerate() {
     $("#genImage2")?.files?.[0],
     $("#genImage3")?.files?.[0],
   ];
-  if (["text_edit", "semantic_edit", "layered", "control"].includes(spec.id) && !files[0]) {
+  if (["img2img", "character", "text_edit", "semantic_edit", "layered", "control"].includes(spec.id) && !files[0]) {
     toast("Upload an image");
     return;
   }
@@ -774,6 +806,10 @@ async function submitGenerate() {
       body.controlType = $("#genControlType")?.value || "pose";
       const strength = optionalNum($("#genControlStrength")?.value);
       if (strength !== undefined) body.controlStrength = strength;
+    }
+    if (spec.id === "img2img" || spec.id === "character") {
+      const denoise = optionalNum($("#genDenoise")?.value);
+      if (denoise !== undefined) body.denoise = denoise;
     }
     if (spec.id === "layered") {
       body.layers = Math.min(8, Math.max(2, parseInt($("#genLayers")?.value, 10) || 3));

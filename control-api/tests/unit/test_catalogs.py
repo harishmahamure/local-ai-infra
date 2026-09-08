@@ -171,6 +171,8 @@ def test_catalogs_load() -> None:
     assert "dialogue_hindi" in catalog.presets
     assert "cinematic_master" in catalog.presets
     assert "cinematic" in catalog.presets
+    assert "face_lock" in catalog.presets
+    assert catalog.presets["face_lock"].parameters.get("denoise") == 0.40
     assert "audio.tts" in catalog.presets["master"].operations
     assert "audio.music" in catalog.presets["master"].operations
 

@@ -22,6 +22,61 @@ TIMEOUT_SECONDS: dict[TimeoutClass, int] = {
     TimeoutClass.CPU: 180,
 }
 
+STAGE_TIMEOUT_SECONDS: dict[TimeoutClass, dict[str, int]] = {
+    TimeoutClass.IMAGE: {
+        "queue_wait": 3600,
+        "runtime_prep": 120,
+        "model_load": 180,
+        "inference": 600,
+        "post_processing": 120,
+        "artifact_store": 120,
+    },
+    TimeoutClass.VIDEO: {
+        "queue_wait": 7200,
+        "runtime_prep": 180,
+        "model_load": 300,
+        "inference": 1800,
+        "post_processing": 300,
+        "artifact_store": 180,
+    },
+    TimeoutClass.ENHANCEMENT: {
+        "queue_wait": 7200,
+        "runtime_prep": 180,
+        "model_load": 300,
+        "inference": 1800,
+        "post_processing": 300,
+        "artifact_store": 180,
+    },
+    TimeoutClass.MUSIC: {
+        "queue_wait": 3600,
+        "runtime_prep": 90,
+        "model_load": 180,
+        "inference": 900,
+        "post_processing": 120,
+        "artifact_store": 120,
+    },
+    TimeoutClass.DOWNLOAD: {
+        "queue_wait": 7200,
+        "runtime_prep": 30,
+        "model_load": 30,
+        "inference": 7200,
+        "post_processing": 60,
+        "artifact_store": 60,
+    },
+    TimeoutClass.CPU: {
+        "queue_wait": 1800,
+        "runtime_prep": 30,
+        "model_load": 30,
+        "inference": 180,
+        "post_processing": 60,
+        "artifact_store": 60,
+    },
+}
+
+
+def stage_timeout(timeout_class: TimeoutClass, stage: str) -> int:
+    return STAGE_TIMEOUT_SECONDS.get(timeout_class, STAGE_TIMEOUT_SECONDS[TimeoutClass.IMAGE]).get(stage, TIMEOUT_SECONDS[timeout_class])
+
 
 @dataclass
 class ResourceRequirement:

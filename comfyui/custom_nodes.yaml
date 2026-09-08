@@ -12,7 +12,7 @@ nodes:
     dir: comfyui_controlnet_aux
     pin: 59b1fc411ede
     pip: requirements.txt
-    note: DWPose, DepthAnythingV2, and other ControlNet preprocessors
+    note: DWPose, DepthAnythingV2. Installed into ComfyUI-ltx (comfy profile runtime on :8188), not the models-only ~/ComfyUI tree.
 
   # Existing packs on GPU box (recorded for reproducibility; no pin unless known)
   - id: comfyroll

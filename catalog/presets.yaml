@@ -167,6 +167,18 @@ presets:
     forbidden_loras: [qwen-lightning, qwen-turbo]
     required_models: [qwen-image-2512-fp8]
 
+  - id: face_lock
+    label: Face lock
+    description: Img2img from a face photo plus a full scene description. Same likeness, new body, wardrobe, and setting. No Lightning or Turbo.
+    operations: [image.generate]
+    workflow_id: qwen-txt2img
+    parameters:
+      steps: 30
+      cfg: 4.0
+      denoise: 0.40
+    forbidden_loras: [qwen-lightning, qwen-turbo]
+    required_models: [qwen-image-2512-fp8]
+
   - id: identity_strict
     label: Identity strict
     description: Maximize face/age/hair/attire preservation on edit (Phase 2).

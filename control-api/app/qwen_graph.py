@@ -28,6 +28,17 @@ LAYERED_REQUIRED_NODES = (
     "LatentCutToBatch",
 )
 
+CONTROL_PREPROCESSORS: dict[str, tuple[str, ...]] = {
+    "pose": ("DWPreprocessor", "OpenposePreprocessor"),
+    "depth": ("DepthAnythingV2Preprocessor", "MiDaS Depth Approximation"),
+    "canny": ("Canny",),
+}
+
+FUN_CONTROLNET_VERSION_HINT = (
+    "Qwen Fun Union ControlNet failed to load. Primary ComfyUI needs native Fun ControlNet "
+    "support (Comfy-Org/ComfyUI#12359, merged Feb 2026). Update ComfyUI, then retry."
+)
+
 
 class GraphBuilder:
     def __init__(self) -> None:
@@ -88,6 +99,105 @@ def _scale_image_to_megapixels(gb: GraphBuilder, image_id: str, megapixels: floa
             "resolution_steps": 1,
         },
     )
+
+
+def _normalize_control_type(control_type: str | None) -> str:
+    if control_type in ("depth", "depth_midas"):
+        return "depth"
+    if control_type in CONTROL_PREPROCESSORS:
+        return control_type or "pose"
+    return "pose" if not control_type else control_type
+
+
+def default_control_preprocessor(control_type: str | None) -> str:
+    if control_type == "depth_midas":
+        return "MiDaS Depth Approximation"
+    kind = _normalize_control_type(control_type)
+    options = CONTROL_PREPROCESSORS.get(kind)
+    if not options:
+        raise ValueError(f"Unknown control_type: {control_type}")
+    return options[0]
+
+
+def select_control_preprocessor(control_type: str | None, available: set[str] | None = None) -> str:
+    if control_type == "depth_midas":
+        preferred = ("MiDaS Depth Approximation", "DepthAnythingV2Preprocessor")
+        kind = "depth"
+    else:
+        kind = _normalize_control_type(control_type)
+        preferred = CONTROL_PREPROCESSORS.get(kind)
+        if not preferred:
+            raise ValueError(f"Unknown control_type: {control_type}")
+    if available is None:
+        return preferred[0]
+    for name in preferred:
+        if name in available:
+            return name
+    raise ValueError(
+        f"Control preprocessor nodes are missing for {kind}: need one of {', '.join(preferred)}. "
+        "Install comfyui_controlnet_aux into ComfyUI-ltx (the :8188 runtime), then retry."
+    )
+
+
+def format_controlnet_comfy_error(detail: str) -> str:
+    lower = (detail or "").lower()
+    if (
+        "controlnetloader" in lower
+        or "fun-controlnet" in lower
+        or "fun controlnet" in lower
+        or "qwen-image-2512-fun-controlnet" in lower
+    ):
+        return f"{FUN_CONTROLNET_VERSION_HINT} ComfyUI said: {detail}"
+    return detail
+
+
+def _add_control_preprocessor(gb: GraphBuilder, image_id: str, node_name: str) -> str:
+    if node_name == "Canny":
+        return gb.add(
+            "Canny",
+            {"image": gb.ref(image_id), "low_threshold": 0.33, "high_threshold": 0.35},
+        )
+    if node_name == "DWPreprocessor":
+        return gb.add(
+            "DWPreprocessor",
+            {
+                "image": gb.ref(image_id),
+                "detect_hand": "enable",
+                "detect_body": "enable",
+                "detect_face": "enable",
+                "resolution": 512,
+                "bbox_detector": "yolox_l.onnx",
+                "pose_estimator": "dw-ll_ucoco_384_bs5.torchscript.pt",
+                "scale_stick_for_xinsr_cn": "disable",
+            },
+        )
+    if node_name == "OpenposePreprocessor":
+        return gb.add(
+            "OpenposePreprocessor",
+            {
+                "image": gb.ref(image_id),
+                "detect_hand": "enable",
+                "detect_body": "enable",
+                "detect_face": "enable",
+                "resolution": 512,
+            },
+        )
+    if node_name == "DepthAnythingV2Preprocessor":
+        return gb.add(
+            "DepthAnythingV2Preprocessor",
+            {"image": gb.ref(image_id), "ckpt_name": "depth_anything_v2_vitl.pth", "resolution": 512},
+        )
+    if node_name == "MiDaS Depth Approximation":
+        return gb.add(
+            "MiDaS Depth Approximation",
+            {
+                "image": gb.ref(image_id),
+                "use_cpu": "false",
+                "midas_type": "DPT_Large",
+                "invert_depth": "false",
+            },
+        )
+    raise ValueError(f"Unknown control preprocessor: {node_name}")
 
 
 def build_txt2img(plan: dict[str, Any]) -> dict[str, Any]:
@@ -303,41 +413,8 @@ def build_control(plan: dict[str, Any]) -> dict[str, Any]:
 
     load = gb.add("LoadImage", {"image": image_name})
     scale = _scale_image_to_megapixels(gb, load, 1.6)
-
-    if control_type == "canny":
-        preproc = gb.add("Canny", {"image": gb.ref(scale), "low_threshold": 0.33, "high_threshold": 0.35})
-    elif control_type == "pose":
-        preproc = gb.add(
-            "DWPreprocessor",
-            {
-                "image": gb.ref(scale),
-                "detect_hand": "enable",
-                "detect_body": "enable",
-                "detect_face": "enable",
-                "resolution": 512,
-                "bbox_detector": "yolox_l.onnx",
-                "pose_estimator": "dw-ll_ucoco_384_bs5.torchscript.pt",
-                "scale_stick_for_xinsr_cn": "disable",
-            },
-        )
-    elif control_type in ("depth", "depth_midas"):
-        if control_type == "depth_midas":
-            preproc = gb.add(
-                "MiDaS Depth Approximation",
-                {
-                    "image": gb.ref(scale),
-                    "use_cpu": "false",
-                    "midas_type": "DPT_Large",
-                    "invert_depth": "false",
-                },
-            )
-        else:
-            preproc = gb.add(
-                "DepthAnythingV2Preprocessor",
-                {"image": gb.ref(scale), "ckpt_name": "depth_anything_v2_vitl.pth", "resolution": 512},
-            )
-    else:
-        raise ValueError(f"Unknown control_type: {control_type}")
+    node_name = plan.get("preprocessor_node") or default_control_preprocessor(control_type)
+    preproc = _add_control_preprocessor(gb, scale, str(node_name))
 
     unet = gb.add("UNETLoader", {"unet_name": M["qwen_unet"], "weight_dtype": "default"})
     clip = gb.add(

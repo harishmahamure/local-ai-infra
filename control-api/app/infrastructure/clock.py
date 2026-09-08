@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from ..domain.ids import new_asset_id, new_job_id, new_trace_id
+from ..domain.ids import new_asset_id, new_attempt_id, new_batch_id, new_job_id, new_trace_id, new_worker_id
 
 
 class SystemClock:
@@ -22,6 +22,15 @@ class UlidGenerator:
 
     def trace_id(self) -> str:
         return new_trace_id()
+
+    def attempt_id(self) -> str:
+        return new_attempt_id()
+
+    def batch_id(self) -> str:
+        return new_batch_id()
+
+    def worker_id(self) -> str:
+        return new_worker_id()
 
 
 def expires_at(now_iso: str, hours: int) -> str:

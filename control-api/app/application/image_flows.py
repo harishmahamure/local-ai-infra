@@ -5,9 +5,19 @@ from typing import Any
 from .. import presets as legacy_presets
 from ..domain.errors import DomainError, ErrorCode
 
-FLOWS = ("t2i", "text_edit", "merge", "semantic_edit", "layered", "control", "lightning")
+FLOWS = ("t2i", "img2img", "character", "text_edit", "merge", "semantic_edit", "layered", "control", "lightning")
 CONTROL_TYPES = ("pose", "depth", "canny")
 LIGHTNING_LORA = "Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors"
+DEFAULT_IMG2IMG_DENOISE = 0.65
+DEFAULT_CHARACTER_DENOISE = 0.40
+FACE_LOCK_PREFIX = (
+    "Keep this exact face, bone structure, age, skin, and likeness from the reference photo. "
+    "Apply the following full image description only to body, wardrobe, pose, lighting, and setting: "
+)
+FACE_LOCK_NEGATIVE = (
+    "different face, identity change, extra people, beauty-filter morph, face swap, "
+    "changed bone structure, different person"
+)
 
 FLOW_META: dict[str, dict[str, Any]] = {
     "t2i": {
@@ -20,6 +30,30 @@ FLOW_META: dict[str, dict[str, Any]] = {
         "steps": 30,
         "cfg": 4.0,
         "prompt_required": True,
+    },
+    "img2img": {
+        "label": "Image-to-Image",
+        "mode": "txt2img",
+        "operation": "image.generate",
+        "min_images": 1,
+        "max_images": 1,
+        "bundles": ["qwen-image-2512-fp8"],
+        "steps": 30,
+        "cfg": 4.0,
+        "prompt_required": True,
+        "denoise": DEFAULT_IMG2IMG_DENOISE,
+    },
+    "character": {
+        "label": "Character (face lock)",
+        "mode": "txt2img",
+        "operation": "image.generate",
+        "min_images": 1,
+        "max_images": 1,
+        "bundles": ["qwen-image-2512-fp8"],
+        "steps": 30,
+        "cfg": 4.0,
+        "prompt_required": True,
+        "denoise": DEFAULT_CHARACTER_DENOISE,
     },
     "text_edit": {
         "label": "In-image text edit",
@@ -99,6 +133,15 @@ class FlowError(ValueError):
         super().__init__(message)
 
 
+def compose_face_lock_prompts(description: str, negative: str = "") -> tuple[str, str]:
+    """Wrap a full scene description so img2img keeps the reference face."""
+    desc = str(description or "").strip()
+    positive = f"{FACE_LOCK_PREFIX}{desc}" if desc else FACE_LOCK_PREFIX.strip()
+    extra = str(negative or "").strip()
+    neg = FACE_LOCK_NEGATIVE if not extra else f"{FACE_LOCK_NEGATIVE}, {extra}"
+    return positive, neg
+
+
 def flow_catalog() -> list[dict[str, Any]]:
     return [
         {
@@ -127,6 +170,7 @@ def resolve_flow_plan(
     height: int | None = None,
     seed: int | None = None,
     upscale: bool | None = None,
+    denoise: float | None = None,
 ) -> dict[str, Any]:
     if flow not in FLOW_META:
         raise FlowError(f"Unknown flow: {flow}")
@@ -178,6 +222,14 @@ def resolve_flow_plan(
         plan["height"] = int(height or 640)
     if flow == "lightning":
         plan["upscale"] = False if upscale is None else bool(upscale)
+    if flow in ("img2img", "character"):
+        default = DEFAULT_CHARACTER_DENOISE if flow == "character" else DEFAULT_IMG2IMG_DENOISE
+        strength = default if denoise is None else float(denoise)
+        if strength < 0 or strength > 1:
+            raise FlowError("denoise must be between 0 and 1")
+        plan["denoise"] = strength
+    if flow == "character":
+        plan["prompt"], plan["negative_prompt"] = compose_face_lock_prompts(prompt, plan["negative_prompt"])
     return plan
 
 

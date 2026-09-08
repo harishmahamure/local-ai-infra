@@ -5,29 +5,32 @@ set -euo pipefail
 CONTROL="${AI_CONTROL:-$HOME/ai-inference/control}"
 # shellcheck disable=SC1091
 source "${CONTROL}/scripts/remote/comfy_paths.sh"
+# Image/ControlNet nodes must live on the comfy-profile runtime (ComfyUI-ltx on :8188).
+# ~/ComfyUI is the shared weights tree and is not launched as a ComfyUI process.
+RUNTIME="${COMFYUI_LTX_ROOT:-$HOME/ComfyUI-ltx}"
 MANIFEST="${CONTROL}/comfyui/custom_nodes.yaml"
-CUSTOM="${COMFYUI_HOME}/custom_nodes"
-COMFY_VENV="${COMFYUI_HOME}/venv"
+CUSTOM="${RUNTIME}/custom_nodes"
+COMFY_VENV="${RUNTIME}/venv"
 
 if [[ ! -f "$MANIFEST" ]]; then
   echo "No custom_nodes.yaml at $MANIFEST — skipping"
   exit 0
 fi
 
-if [[ ! -d "$COMFYUI_HOME" ]]; then
-  echo "ComfyUI not found at $COMFYUI_HOME — skipping custom nodes"
+if [[ ! -d "$RUNTIME" ]]; then
+  echo "ComfyUI runtime not found at $RUNTIME — skipping custom nodes"
   exit 0
 fi
 
 mkdir -p "$CUSTOM"
 
 if [[ ! -x "${COMFY_VENV}/bin/pip" ]]; then
-  if [[ -f "${COMFYUI_HOME}/main.py" ]]; then
+  if [[ -f "${RUNTIME}/main.py" ]]; then
     echo "Creating ComfyUI venv at ${COMFY_VENV}..."
     python3 -m venv "${COMFY_VENV}"
     "${COMFY_VENV}/bin/pip" install -U pip wheel setuptools
     echo "Installing ComfyUI base requirements (includes torch)..."
-    "${COMFY_VENV}/bin/pip" install -r "${COMFYUI_HOME}/requirements.txt"
+    "${COMFY_VENV}/bin/pip" install -r "${RUNTIME}/requirements.txt"
   else
     echo "ComfyUI venv missing at ${COMFY_VENV} — skipping custom-node pip deps" >&2
     exit 0
@@ -35,7 +38,7 @@ if [[ ! -x "${COMFY_VENV}/bin/pip" ]]; then
 fi
 
 PIP="${COMFY_VENV}/bin/pip"
-export CONTROL COMFYUI_HOME CUSTOM PIP
+export CONTROL CUSTOM PIP
 
 python3 << 'PY'
 import os
@@ -46,7 +49,6 @@ from pathlib import Path
 import yaml
 
 control = Path(os.environ["CONTROL"])
-comfy = Path(os.environ["COMFYUI_HOME"])
 custom = Path(os.environ["CUSTOM"])
 manifest_path = control / "comfyui" / "custom_nodes.yaml"
 pip = os.environ["PIP"]

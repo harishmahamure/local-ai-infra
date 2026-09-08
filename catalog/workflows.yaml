@@ -11,7 +11,7 @@ workflows:
     required_models: [qwen-image-2512-fp8]
     optional_models: [qwen-image-2512-lightning-lora]
     required_nodes: [UNETLoader, CLIPLoader, VAELoader, KSampler, SaveImage]
-    supported_presets: [draft, balanced, master, character_master]
+    supported_presets: [draft, balanced, master, character_master, face_lock]
     supports_seed: true
     supports_cancel: true
     supports_batch: true

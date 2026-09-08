@@ -59,7 +59,7 @@ _QC_OUT: dict[str, Any] = {
 _SEED_STEPS = {"properties": {"seed": _SEED, "steps": _STEPS}}
 _SEED_ONLY = {"properties": {"seed": _SEED}}
 
-IMAGE_PRESETS = ["draft", "balanced", "master", "character_master"]
+IMAGE_PRESETS = ["draft", "balanced", "master", "character_master", "face_lock"]
 VIDEO_PRESETS = ["draft", "balanced", "master"]
 GENERIC = ["draft", "balanced", "master"]
 TTS_PRESETS = ["narrator_hindi", "dialogue_hindi", "draft", "master"]
@@ -103,9 +103,11 @@ def all_operations() -> list[Operation]:
                     "height": {"type": "integer"},
                     "aspect_ratio": _ASPECT,
                     "candidate_count": {"type": "integer", "minimum": 1, "maximum": 8},
+                    "image": _ASSET,
+                    "denoise": {"type": "number", "minimum": 0, "maximum": 1},
                 },
             },
-            parameter_schema={"properties": {"seed": _SEED, "steps": _STEPS, "cfg": {"type": "number"}, "loras": {"type": "array"}}},
+            parameter_schema={"properties": {"seed": _SEED, "steps": _STEPS, "cfg": {"type": "number"}, "loras": {"type": "array"}, "denoise": {"type": "number", "minimum": 0, "maximum": 1}}},
             output_schema=_IMAGE_OUT,
             implemented=True,
             required_models=["qwen-image-2512-fp8"],
