@@ -25,24 +25,14 @@ if [[ -d /usr/local/cuda/bin ]]; then
   export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
 fi
 
-# Reuse the already-built RotorQuant fork for llama-fast (turbo2 KV cache).
-if [[ ! -x "$LLAMA/build/bin/llama-server" ]]; then
-  if [[ -x "$TURBOQUANT/build/bin/llama-server" ]]; then
-    echo "Linking ${LLAMA} -> ${TURBOQUANT}"
-    ln -sfn "$TURBOQUANT" "$LLAMA"
-  else
-    echo "Missing llama-server at ${LLAMA}/build/bin/llama-server" >&2
-    echo "Expected existing tree at ${TURBOQUANT}." >&2
-    exit 1
-  fi
-fi
+# llama-fast: iso/RotorQuant fork. Gemma stays on ~/llama.cpp (ggml-org, no iso).
+chmod +x "$CONTROL/scripts/remote/"*.sh
+bash "$CONTROL/scripts/remote/build-llamacpp.sh"
 
 if [[ ! -x "$GGML_LLAMA/build/bin/llama-server" ]]; then
   echo "Warning: Gemma binary missing at ${GGML_LLAMA}/build/bin/llama-server" >&2
   echo "gemma.env pins LLAMACPP_ROOT=${GGML_LLAMA}" >&2
 fi
-
-chmod +x "$CONTROL/scripts/remote/"*.sh
 bash "$CONTROL/scripts/remote/install_systemd_units.sh"
 
 loginctl enable-linger "$USER" 2>/dev/null || true

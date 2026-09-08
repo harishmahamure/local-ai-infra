@@ -25,13 +25,19 @@ Bootstrap does **not** rebuild llama.cpp or download GGUFs. It reuses:
 - `~/llama.cpp` (ggml-org master, for Gemma 4)
 - `/data/model_backup/llamacpp` → `~/ai-inference/models/llamacpp`
 
+## Dashboard
+
+Open **http://192.168.50.100:8090/** (or `./bin/ai ui`) for GPU status, exclusive Gemma / Qwen load-unload, and GGUF downloads.
+
+Mac `http://127.0.0.1:8090` only works if the Mac proxy owns that port. Another local agent on 8090 will hide this UI — use the GPU URL instead.
+
 ## Control API
 
 | Where | URL |
 | ----- | --- |
-| This Mac | http://127.0.0.1:8090 |
-| GPU box (direct) | http://192.168.50.100:8090 |
-| Swagger | http://127.0.0.1:8090/docs |
+| GPU dashboard | http://192.168.50.100:8090/ |
+| GPU API | http://192.168.50.100:8090 |
+| Swagger | http://192.168.50.100:8090/docs |
 | Spec | `control-api/openapi.yaml` |
 
 | Method | Path | Action |
@@ -50,6 +56,7 @@ Bootstrap does **not** rebuild llama.cpp or download GGUFs. It reuses:
 ## CLI
 
 ```bash
+ai ui
 ai status
 ai start gemma
 ai start llama-fast

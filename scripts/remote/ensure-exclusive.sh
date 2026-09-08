@@ -2,7 +2,7 @@
 # GPU mutex: at most one inference process (llama-fast | gemma).
 #
 #   ensure-exclusive.sh              stop every managed unit + stray processes
-#   ensure-exclusive.sh UNIT.service ExecStartPre: kill strays only
+#   ensure-exclusive.sh UNIT.service ExecStartPre: stop others, free :8080
 set -u
 
 SELF_UNIT="${1:-}"
@@ -75,6 +75,24 @@ kill_stray_inference() {
   done
 }
 
+wait_ports_free() {
+  local tries="${1:-20}"
+  local i port pids
+  for i in $(seq 1 "$tries"); do
+    pids=""
+    for port in "${PORTS[@]}"; do
+      pids="${pids}$(pids_on_port "$port")"
+    done
+    if [[ -z "$pids" ]]; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "warning: inference port still in use after unload wait" >&2
+  ss -lntpH "sport = :8080" >&2 || true
+  return 1
+}
+
 wait_gpu_compute_idle() {
   local tries="${1:-20}"
   local i apps
@@ -92,11 +110,9 @@ wait_gpu_compute_idle() {
 
 mkdir -p "$LOCK_DIR" 2>/dev/null || true
 
-if [[ -z "$SELF_UNIT" ]]; then
-  stop_managed_units
-fi
-
+stop_managed_units
 kill_stray_inference
+wait_ports_free 20 || exit 1
 wait_gpu_compute_idle 20
 
 if [[ -n "$SELF_NAME" ]]; then

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from ..application.chat import ControlServices, build_services
 from ..interfaces.http.routes import router as v1_router
+
+STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
 
 
 def create_app(engine: ControlServices | None = None) -> FastAPI:
@@ -42,6 +47,15 @@ def create_app(engine: ControlServices | None = None) -> FastAPI:
         request.state.request_id = str(uuid.uuid4())
         return await call_next(request)
 
+    @app.get("/", include_in_schema=False)
+    def dashboard():
+        index = STATIC_DIR / "index.html"
+        if not index.is_file():
+            return {"error": "dashboard not installed"}
+        return FileResponse(index)
+
     app.include_router(v1_router)
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.state.engine = engine or build_services()
     return app

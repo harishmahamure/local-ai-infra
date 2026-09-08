@@ -28,6 +28,7 @@ Commands:
   switch <profile>    Alias for start
   stop                Stop all GPU services (unload models)
   url                 Print LAN endpoints
+  ui                  Open GPU control dashboard in the browser
   inventory           Remote hardware/software inventory
   sync                Push control repo to GPU box
   bootstrap [--reseed-env]  Remote setup + enable control API + Mac proxy
@@ -37,8 +38,8 @@ Profiles:
   llama-fast          Qwen3.6-35B-A3B RotorQuant + vision on :8080
   gemma               Gemma 4 E4B text + vision on :8080
 
-Control API: \${CONTROL_URL:-http://127.0.0.1:8090}
-Docs:        \${CONTROL_URL:-http://127.0.0.1:8090}/docs
+Dashboard:   \${GPU_CONTROL_URL:-http://192.168.50.100:8090}/
+Docs:        \${GPU_CONTROL_URL:-http://192.168.50.100:8090}/docs
 
 Examples:
   ai start gemma
@@ -99,6 +100,13 @@ case "$cmd" in
     ;;
   url)
     api_get /v1/status | python3 -c "import json,sys; d=json.load(sys.stdin); eps=d.get('endpoints') or {}; print('LLM:  '+(d.get('activeUrl') or eps.get('llm',''))); print('Ctrl: '+eps.get('control',''))"
+    ;;
+  ui)
+    base="${GPU_CONTROL_URL:-http://192.168.50.100:8090}"
+    echo "Control UI: ${base}/"
+    if command -v open >/dev/null; then
+      open "${base}/"
+    fi
     ;;
   download)
     push_download_env
