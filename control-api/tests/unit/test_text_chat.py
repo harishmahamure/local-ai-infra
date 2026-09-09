@@ -97,6 +97,7 @@ def _engine(*, runtime=None, llama=None):
         model_runtime=model_runtime,
         downloader=FakeDownloader(),
         llama_chat=llama or FakeLlama(),
+        enable_jobs=False,
     ), module
 
 

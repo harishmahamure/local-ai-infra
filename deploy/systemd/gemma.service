@@ -2,7 +2,7 @@
 Description=llama-server Gemma 4 E4B planner (Q4 + vision)
 After=network-online.target
 Wants=network-online.target
-Conflicts=llama-fast.service
+Conflicts=llama-fast.service comfyui.service
 StartLimitIntervalSec=120
 StartLimitBurst=3
 

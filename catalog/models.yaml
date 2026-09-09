@@ -51,3 +51,105 @@ models:
       - repo: jimbothigpen/Qwen3.6-35B-A3B-GGUF
         path: Qwen3.6-35B-A3B-mmproj-F16.gguf
         local: Qwen3.6-35B-A3B-mmproj-F16.gguf
+
+  - id: qwen-image-2512-fp8
+    license: Apache-2.0
+    commercial: true
+    dest: comfyui
+    vram_gb: 20
+    family: qwen-image
+    role: t2i
+    version: "2512"
+    provider: Qwen
+    estimated_vram: 20
+    supported_operations: [generate_character, generate_location, generate_prop, generate_attire]
+    runtime: comfyui
+    enabled: true
+    files:
+      - repo: Comfy-Org/Qwen-Image_ComfyUI
+        path: split_files/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors
+        local: diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors
+      - repo: Comfy-Org/Qwen-Image_ComfyUI
+        path: split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors
+        local: text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors
+      - repo: Comfy-Org/Qwen-Image_ComfyUI
+        path: split_files/vae/qwen_image_vae.safetensors
+        local: vae/qwen_image_vae.safetensors
+
+  - id: qwen-image-2512-lightning-lora
+    license: Apache-2.0
+    commercial: true
+    dest: comfyui
+    vram_gb: 0
+    family: qwen-image
+    role: lora
+    provider: lightx2v
+    estimated_vram: 0
+    supported_operations: [generate_character]
+    runtime: comfyui
+    enabled: true
+    files:
+      - repo: lightx2v/Qwen-Image-2512-Lightning
+        path: Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors
+        local: loras/Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors
+
+  - id: qwen-image-edit-2511-fp8
+    license: Apache-2.0
+    commercial: true
+    dest: comfyui
+    vram_gb: 21
+    family: qwen-image-edit
+    role: edit
+    version: "2511"
+    provider: Qwen
+    estimated_vram: 21
+    supported_operations: [generate_character, generate_character_turnaround, generate_keyframe, generate_shot_reference, generate_attire]
+    runtime: comfyui
+    enabled: true
+    files:
+      - repo: Comfy-Org/Qwen-Image-Edit_ComfyUI
+        path: split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors
+        local: diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors
+      - repo: lightx2v/Qwen-Image-Edit-2511-Lightning
+        path: Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
+        local: loras/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
+
+  - id: qwen-controlnet-diffsynth
+    license: Apache-2.0
+    commercial: true
+    dest: comfyui
+    vram_gb: 3
+    family: qwen-image
+    role: inpaint
+    provider: DiffSynth
+    estimated_vram: 3
+    supported_operations: [inpaint_asset, outpaint_asset]
+    runtime: comfyui
+    enabled: true
+    files:
+      - repo: Comfy-Org/Qwen-Image-DiffSynth-ControlNets
+        path: split_files/model_patches/qwen_image_inpaint_diffsynth_controlnet.safetensors
+        local: model_patches/qwen_image_inpaint_diffsynth_controlnet.safetensors
+      - repo: lightx2v/Qwen-Image-2512-Lightning
+        path: Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors
+        local: loras/Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors
+
+  - id: upscalers-esrgan
+    license: MIT
+    commercial: true
+    dest: comfyui
+    vram_gb: 0
+    family: realesrgan
+    role: upscale
+    provider: RealESRGAN
+    estimated_vram: 2
+    supported_operations: [upscale_asset]
+    runtime: comfyui
+    enabled: true
+    files:
+      - repo: uwg/upscaler
+        path: Face_Restore/FaceFusion/real_esrgan_x4plus.pth
+        local: upscale_models/RealESRGAN_x4plus.pth
+      - repo: uwg/upscaler
+        path: Face_Restore/FaceFusion/real_esrgan_x2plus.pth
+        local: upscale_models/RealESRGAN_x2plus.pth

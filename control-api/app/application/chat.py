@@ -8,7 +8,8 @@ from ..domain.errors import DomainError, ErrorCode
 from ..domain.models import ModelState
 from ..infrastructure.catalogs import CatalogRegistry, enforce_license
 from ..infrastructure.llama_chat import LlamaChatClient
-from ..infrastructure.model_runtime import CatalogModelRuntime, SystemdModelDownloader, profile_for_text_model
+from ..infrastructure.model_runtime import CatalogModelRuntime, SystemdModelDownloader
+from .jobs import JobService
 from .text_chat import TEXT_CHAT_MODELS, build_llama_messages, llama_model_name
 
 
@@ -44,6 +45,15 @@ class ControlServices:
     model_runtime: CatalogModelRuntime
     downloader: SystemdModelDownloader
     llama_chat: LlamaChatClient | None = None
+    jobs: JobService | None = None
+
+    def start(self) -> None:
+        if self.jobs:
+            self.jobs.recover_and_start()
+
+    def stop(self) -> None:
+        if self.jobs:
+            self.jobs.stop()
 
     def _llama_client(self) -> LlamaChatClient:
         if self.llama_chat is None:
@@ -55,14 +65,17 @@ class ControlServices:
             state=self.model_runtime.state(model.id),
             disk_status=self.model_runtime.disk_status().get(model.id),
         )
-        payload["profile"] = profile_for_text_model(model.id)
+        payload["profile"] = self.model_runtime.profile_for(model.id)
         live_ctx = _live_context_length(model.id, model.supported_context)
         if live_ctx:
             payload["context_length"] = live_ctx
         return payload
 
     def status(self) -> dict[str, Any]:
-        return runtime.get_status()
+        payload = runtime.get_status()
+        if self.jobs:
+            payload["queue"] = self.jobs.snapshot()
+        return payload
 
     def disk_models(self) -> dict[str, Any]:
         return runtime.get_models()
@@ -86,6 +99,7 @@ class ControlServices:
         }
 
     def load_model(self, model_id: str) -> dict[str, Any]:
+        self._guard_gpu()
         try:
             return self.model_runtime.load(model_id)
         except DomainError:
@@ -94,7 +108,16 @@ class ControlServices:
             raise DomainError(ErrorCode.INTERNAL_ERROR, str(exc)) from exc
 
     def unload_model(self, model_id: str) -> dict[str, Any]:
+        self._guard_gpu()
         return self.model_runtime.unload(model_id)
+
+    def _guard_gpu(self) -> None:
+        if self.jobs and self.jobs.scheduler.is_busy():
+            raise DomainError(
+                ErrorCode.GPU_BUSY,
+                "An image job is using the GPU; wait for it to finish or cancel it",
+                {"active_job": self.jobs.scheduler.active_job()},
+            )
 
     def download_status(self) -> dict[str, Any]:
         return self.downloader.status()
@@ -142,6 +165,7 @@ class ControlServices:
             raise DomainError(ErrorCode.UNSUPPORTED_OPERATION, f"{model_id} does not support text.chat")
         enforce_license(self.catalog, [model_id])
         messages = build_llama_messages(list(body.get("messages") or []), resolve_asset=_no_assets)
+        self._guard_gpu()
         if self.model_runtime.state(model_id) != ModelState.READY:
             self.model_runtime.load(model_id)
         payload: dict[str, Any] = {
@@ -162,6 +186,8 @@ def build_services(
     downloader: SystemdModelDownloader | None = None,
     llama_chat: LlamaChatClient | None = None,
     commercial_mode: bool | None = None,
+    jobs: JobService | None = None,
+    enable_jobs: bool = True,
 ) -> ControlServices:
     from ..infrastructure.catalogs import load_catalogs
 
@@ -171,9 +197,39 @@ def build_services(
     )
     dl = downloader or SystemdModelDownloader(downloads)
     runtime_impl = model_runtime or CatalogModelRuntime(cat, runtime, downloads)
+    job_svc = jobs
+    if job_svc is None and enable_jobs:
+        from datetime import datetime, timezone
+
+        from ..infrastructure.assets import AssetStore
+        from ..infrastructure.comfy_client import ComfyClient
+        from ..infrastructure.gpu_scheduler import GpuScheduler
+        from ..infrastructure.job_store import JobStore
+        from ..infrastructure.job_worker import JobWorker
+
+        store = JobStore(config.JOBS_DB)
+        asset_store = AssetStore(config.ASSET_DIR, store)
+        scheduler = GpuScheduler(runtime)
+        worker = JobWorker(
+            jobs=store,
+            assets=asset_store,
+            scheduler=scheduler,
+            catalog=cat,
+            client=ComfyClient(),
+            now_iso=lambda: datetime.now(timezone.utc).isoformat(),
+            disk_status=runtime_impl.disk_status,
+        )
+        job_svc = JobService(
+            store=store,
+            assets=asset_store,
+            scheduler=scheduler,
+            worker=worker,
+            disk_status=runtime_impl.disk_status,
+        )
     return ControlServices(
         catalog=cat,
         model_runtime=runtime_impl,
         downloader=dl,
         llama_chat=llama_chat,
+        jobs=job_svc,
     )

@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: llama.cpp Control API
-  version: "4.0.0"
+  title: GPU Control API
+  version: "5.0.0"
   description: |
-    Minimal llama.cpp control plane on the GPU box.
+    Exclusive GPU control plane: llama.cpp chat + ComfyUI Qwen image jobs.
 
     Mac proxy: `http://127.0.0.1:8090` → GPU `http://192.168.50.100:8090`.
 servers:
@@ -14,6 +14,7 @@ servers:
 tags:
   - name: Health
   - name: llama.cpp
+  - name: image
 paths:
   /health:
     get:
@@ -26,10 +27,10 @@ paths:
     get:
       tags: [Health]
       summary: Readiness probe
-      description: 200 if a llama.cpp profile is LOADED; 503 otherwise.
+      description: 200 if a GPU profile is LOADED; 503 otherwise.
       responses:
         "200":
-          description: A text model is loaded
+          description: A profile is loaded
         "503":
           description: GPU idle or still starting
   /v1/status:
@@ -38,7 +39,7 @@ paths:
       summary: GPU runtime status
       responses:
         "200":
-          description: loadState, profile, VRAM, processes
+          description: loadState, profile, VRAM, processes, image queue
   /v1/models:
     get:
       tags: [llama.cpp]
@@ -72,6 +73,8 @@ paths:
       responses:
         "200":
           description: Profile started
+        "409":
+          description: GPU busy with an image job
   /v1/models/{model_id}/unload:
     post:
       tags: [llama.cpp]
@@ -95,7 +98,7 @@ paths:
     post:
       tags: [llama.cpp]
       summary: Text + vision chat
-      description: Synchronous JSON or SSE when stream=true. Starts llama-fast or gemma as needed.
+      description: Synchronous JSON or SSE when stream=true. Starts llama-fast or gemma as needed. 409 if an image job holds the GPU.
       requestBody:
         required: true
         content:
@@ -108,13 +111,13 @@ paths:
   /v1/downloads:
     get:
       tags: [llama.cpp]
-      summary: GGUF download status
+      summary: Catalog download status
       responses:
         "200":
           description: Download state and progress
     post:
       tags: [llama.cpp]
-      summary: Queue a GGUF download
+      summary: Queue a catalog download
       requestBody:
         required: true
         content:
@@ -124,6 +127,127 @@ paths:
       responses:
         "202":
           description: Download started
+  /v1/image/operations:
+    get:
+      tags: [image]
+      summary: List image operations
+      responses:
+        "200":
+          description: Ten Qwen operations with schemas and availability
+  /v1/image/jobs:
+    post:
+      tags: [image]
+      summary: Queue an image job
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageJobRequest"
+      responses:
+        "202":
+          description: Job queued
+  /v1/jobs:
+    get:
+      tags: [image]
+      summary: List jobs
+      parameters:
+        - name: status
+          in: query
+          schema: {type: string}
+        - name: cursor
+          in: query
+          schema: {type: string}
+        - name: limit
+          in: query
+          schema: {type: integer, default: 20}
+      responses:
+        "200":
+          description: Cursor-paginated jobs
+  /v1/jobs/{job_id}:
+    get:
+      tags: [image]
+      summary: Get job status
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Status, phase, progress, assets, error
+  /v1/jobs/{job_id}/events:
+    get:
+      tags: [image]
+      summary: Job SSE stream
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: text/event-stream
+  /v1/jobs/{job_id}/cancel:
+    post:
+      tags: [image]
+      summary: Cancel a job
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Cancelled or cancel requested
+  /v1/assets:
+    post:
+      tags: [image]
+      summary: Upload an asset
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Asset metadata
+  /v1/assets/{asset_id}:
+    get:
+      tags: [image]
+      summary: Asset metadata
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Metadata
+        "404":
+          description: Not found
+  /v1/assets/{asset_id}/content:
+    get:
+      tags: [image]
+      summary: Asset bytes
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Image file
 components:
   schemas:
     TextChatRequest:
@@ -150,4 +274,60 @@ components:
         ids:
           type: array
           items: {type: string}
-          description: Catalog ids. Empty = all llamacpp bundles.
+          description: Catalog ids. Empty = all bundles.
+    ImageJobRequest:
+      type: object
+      required: [operation]
+      properties:
+        operation:
+          type: string
+          enum:
+            - generate_character
+            - generate_character_turnaround
+            - generate_attire
+            - generate_location
+            - generate_prop
+            - generate_keyframe
+            - generate_shot_reference
+            - inpaint_asset
+            - outpaint_asset
+            - upscale_asset
+        prompt: {type: string}
+        negative_prompt: {type: string}
+        style_preset:
+          type: string
+          enum:
+            - cinematic_naturalism
+            - painterly_concept
+            - graphic_still
+            - photoreal_cinematic
+            - documentary
+            - off
+          description: Look lock for character, turnaround, keyframe, and shot. Default cinematic_naturalism. off disables injection.
+        width: {type: integer}
+        height: {type: integer}
+        seed: {type: integer}
+        fast: {type: boolean, default: false}
+        scale: {type: integer, description: "2 or 4 for upscale_asset"}
+        left: {type: integer}
+        right: {type: integer}
+        top: {type: integer}
+        bottom: {type: integer}
+        framing: {type: string}
+        lens: {type: string}
+        camera_height: {type: string}
+        image:
+          $ref: "#/components/schemas/AssetRef"
+        mask:
+          $ref: "#/components/schemas/AssetRef"
+        character:
+          $ref: "#/components/schemas/AssetRef"
+        attire:
+          $ref: "#/components/schemas/AssetRef"
+        location:
+          $ref: "#/components/schemas/AssetRef"
+    AssetRef:
+      type: object
+      required: [asset_id]
+      properties:
+        asset_id: {type: string}

@@ -30,7 +30,7 @@ def load_catalogs(catalog_dir: Path, *, commercial_mode: bool = True) -> Catalog
     models: dict[str, ModelRecord] = {}
     for item in models_raw.get("models") or []:
         dest = str(item.get("dest", "llamacpp"))
-        if dest != "llamacpp":
+        if dest not in {"llamacpp", "comfyui"}:
             continue
         files = [
             ModelFile(

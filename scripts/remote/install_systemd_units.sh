@@ -16,10 +16,10 @@ if [[ ! -d "$CONTROL/deploy/systemd" ]]; then
 fi
 
 cp "$CONTROL/deploy/systemd/"*.service "$UNIT_DIR/"
-systemctl --user disable --now llama-slow.service comfyui.service comfyui-ltx.service 2>/dev/null || true
-rm -f "$UNIT_DIR/llama-slow.service" "$UNIT_DIR/comfyui.service" "$UNIT_DIR/comfyui-ltx.service"
+systemctl --user disable --now llama-slow.service comfyui-ltx.service 2>/dev/null || true
+rm -f "$UNIT_DIR/llama-slow.service" "$UNIT_DIR/comfyui-ltx.service"
 
-for svc in llama-fast gemma ai-control ai-download; do
+for svc in llama-fast gemma comfyui ai-control ai-download; do
   f="$UNIT_DIR/${svc}.service"
   [[ -f "$f" ]] || continue
   sed -i "s|@HOME@|$HOME|g" "$f"

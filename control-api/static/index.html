@@ -1,58 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GPU control</title>
-  <link rel="stylesheet" href="/static/styles.css">
-</head>
-<body>
-  <header class="top">
-    <div>
-      <h1>GPU control</h1>
-      <p class="sub" id="gpu-name">Connecting…</p>
-    </div>
-    <div class="badge-wrap">
-      <span id="load-badge" class="badge stopped">STOPPED</span>
-    </div>
-  </header>
-
-  <main>
-    <section class="card" aria-labelledby="runtime-heading">
-      <h2 id="runtime-heading">Runtime</h2>
-      <dl class="facts" id="runtime-facts">
-        <div><dt>Profile</dt><dd id="fact-profile">—</dd></div>
-        <div><dt>Model</dt><dd id="fact-model">—</dd></div>
-        <div><dt>API</dt><dd id="fact-api">—</dd></div>
-        <div><dt>VRAM</dt><dd id="fact-vram">—</dd></div>
-        <div><dt>Util</dt><dd id="fact-util">—</dd></div>
-      </dl>
-      <div class="vram" aria-hidden="true"><div id="vram-bar"></div></div>
-      <ul class="procs" id="proc-list"></ul>
-      <p class="error" id="runtime-error" hidden></p>
-      <div class="actions">
-        <button type="button" id="btn-gemma" data-action="load" data-model="gemma-4-e4b">Load Gemma</button>
-        <button type="button" id="btn-qwen" data-action="load" data-model="qwen36-35b-a3b-rq">Load Qwen3.6</button>
-        <button type="button" id="btn-stop" class="danger" data-action="stop">Stop all</button>
-      </div>
-    </section>
-
-    <section class="card" aria-labelledby="catalog-heading">
-      <h2 id="catalog-heading">Catalog</h2>
-      <div id="catalog" class="catalog">Loading models…</div>
-    </section>
-
-    <section class="card" aria-labelledby="downloads-heading">
-      <h2 id="downloads-heading">Downloads</h2>
-      <div class="dl-head">
-        <p id="dl-summary">Idle</p>
-        <button type="button" id="btn-download-all" data-action="download-all">Start all</button>
-      </div>
-      <div class="progress" aria-hidden="true"><div id="dl-bar"></div></div>
-      <p id="dl-current" class="muted"></p>
-      <pre id="dl-log" class="log" aria-label="Download log"></pre>
-    </section>
-  </main>
-  <script src="/static/app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPU control</title>
+    <script type="module" crossorigin src="/assets/index-BMhd7EjZ.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-IaSa9UWA.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>

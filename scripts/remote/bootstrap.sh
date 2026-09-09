@@ -10,15 +10,15 @@ VENV="${AI_VENV:-$HOME/ai-inference/venv}"
 TURBOQUANT="${HOME}/llama-cpp-turboquant"
 GGML_LLAMA="${HOME}/llama.cpp"
 
-echo "=== bootstrap ai-inference (llama.cpp only) ==="
-mkdir -p "$HOME/ai-inference"/{models/llamacpp,logs,control,config}
+echo "=== bootstrap ai-inference (llama.cpp + ComfyUI) ==="
+mkdir -p "$HOME/ai-inference"/{models/llamacpp,logs,control,config,state,assets}
 
 if [[ ! -d "$VENV" ]]; then
   python3 -m venv "$VENV"
 fi
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
-pip install -U pip pyyaml huggingface_hub tqdm fastapi uvicorn httpx
+pip install -U pip pyyaml huggingface_hub tqdm fastapi uvicorn httpx python-multipart
 
 if [[ -d /usr/local/cuda/bin ]]; then
   export PATH="/usr/local/cuda/bin:${PATH}"
@@ -38,11 +38,11 @@ bash "$CONTROL/scripts/remote/install_systemd_units.sh"
 loginctl enable-linger "$USER" 2>/dev/null || true
 
 systemctl --user disable llama-fast.service gemma.service comfyui.service comfyui-ltx.service ai-download.service 2>/dev/null || true
-rm -f "$HOME/.config/systemd/user/comfyui.service" "$HOME/.config/systemd/user/comfyui-ltx.service"
+rm -f "$HOME/.config/systemd/user/comfyui-ltx.service"
 systemctl --user daemon-reload
 systemctl --user enable --now ai-control.service
 
 echo "Bootstrap complete."
 echo "Control API: http://${LAN_IP}:8090/ ( /docs + /v1 )"
-echo "GPU inference stays stopped until: ai start gemma|llama-fast"
+echo "GPU inference stays stopped until: ai start gemma|llama-fast|comfyui"
 echo "Background download: ai download (or POST /v1/downloads)"

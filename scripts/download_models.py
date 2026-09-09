@@ -41,6 +41,7 @@ def _safe_models_root(env_name: str, default: str) -> Path:
 
 
 LLAMA_ROOT = _safe_models_root("LLAMACPP_MODELS", "~/ai-inference/models/llamacpp")
+COMFY_ROOT = _safe_models_root("COMFYUI_MODELS", "~/model_backup/comfyui")
 INSTALLED = Path(os.environ.get("INSTALLED_JSON", ROOT / "catalog" / "installed.json"))
 DOWNLOAD_STATE = Path(
     os.environ.get("DOWNLOAD_STATE", os.path.expanduser("~/ai-inference/logs/download-state.json"))
@@ -106,9 +107,11 @@ def load_catalog() -> dict:
 
 
 def dest_root(dest: str) -> Path:
-    if dest != "llamacpp":
-        raise RuntimeError(f"Unsupported dest {dest!r}; this downloader only fetches llamacpp GGUFs")
-    return LLAMA_ROOT
+    if dest == "llamacpp":
+        return LLAMA_ROOT
+    if dest == "comfyui":
+        return COMFY_ROOT
+    raise RuntimeError(f"Unsupported dest {dest!r}")
 
 
 def sha256_file(path: Path) -> str:

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# GPU mutex: at most one inference process (llama-fast | gemma).
+# GPU mutex: at most one inference process (llama-fast | gemma | comfyui).
 #
 #   ensure-exclusive.sh              stop every managed unit + stray processes
-#   ensure-exclusive.sh UNIT.service ExecStartPre: stop others, free :8080
+#   ensure-exclusive.sh UNIT.service ExecStartPre: stop others, free :8080/:8188
 set -u
 
 SELF_UNIT="${1:-}"
 SELF_NAME="${SELF_UNIT%.service}"
-UNITS=(llama-fast gemma)
-PORTS=(8080)
+UNITS=(llama-fast gemma comfyui)
+PORTS=(8080 8188)
 LOCK_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 LOCK_FILE="${LOCK_DIR}/ai-inference.profile"
 
@@ -56,6 +56,11 @@ kill_stray_inference() {
     extra+=("$pid")
   done < <(pgrep -f '/llama-server( |$)' 2>/dev/null || true)
 
+  while read -r pid; do
+    [[ -n "$pid" ]] || continue
+    extra+=("$pid")
+  done < <(pgrep -f "${HOME}/ComfyUI/main.py" 2>/dev/null || true)
+
   if ((${#extra[@]} == 0)); then
     return 0
   fi
@@ -90,6 +95,7 @@ wait_ports_free() {
   done
   echo "warning: inference port still in use after unload wait" >&2
   ss -lntpH "sport = :8080" >&2 || true
+  ss -lntpH "sport = :8188" >&2 || true
   return 1
 }
 

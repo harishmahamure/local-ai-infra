@@ -11,7 +11,12 @@ from typing import Any
 from . import config
 
 _CONTROL_TIMEOUT_SEC = 180
-UNITS = ("llama-fast", "gemma")
+UNITS = ("llama-fast", "gemma", "comfyui")
+PROFILE_ENDPOINT = {
+    "llama-fast": (8080, "/health"),
+    "gemma": (8080, "/health"),
+    "comfyui": (8188, "/system_stats"),
+}
 
 
 def _run_control(*args: str, check: bool = True, timeout: int = _CONTROL_TIMEOUT_SEC) -> subprocess.CompletedProcess[str]:
@@ -97,6 +102,7 @@ def _model_hint(profile: str) -> str:
     hints = {
         "gemma": "Gemma 4 E4B Q4 + mmproj (text + vision, 128K ctx)",
         "llama-fast": "Qwen3.6-35B-A3B RotorQuant Q4 + mmproj (text + vision, 262K ctx)",
+        "comfyui": "Qwen-Image 2512 + Edit (ComfyUI :8188)",
         "none": "none — GPU idle",
     }
     if profile.startswith("CONFLICT"):
@@ -113,6 +119,7 @@ def get_status() -> dict[str, Any]:
     services = _service_states()
     profile = _active_profile(services)
     llm_url = f"http://{config.LAN_IP}:{config.LLAMA_PORT}/v1"
+    comfy_url = f"http://{config.LAN_IP}:{config.COMFY_PORT}"
 
     if profile == "none":
         load_state = "STOPPED"
@@ -123,14 +130,16 @@ def get_status() -> dict[str, Any]:
         api_state = "multiple services — exclusive GPU violated"
         active_url = None
     else:
-        base = f"http://{config.LAN_IP}:{config.LLAMA_PORT}"
-        if _http_ok(f"{base}/health") or _http_ok(f"{base}/v1/models"):
+        port, path = PROFILE_ENDPOINT.get(profile, (config.LLAMA_PORT, "/health"))
+        if _http_ok(f"http://{config.LAN_IP}:{port}{path}") or (
+            profile != "comfyui" and _http_ok(f"http://{config.LAN_IP}:{config.LLAMA_PORT}/v1/models")
+        ):
             load_state = "LOADED"
             api_state = "ready"
         else:
             load_state = "STARTING"
             api_state = "not responding"
-        active_url = llm_url
+        active_url = comfy_url if profile == "comfyui" else llm_url
 
     return {
         "exclusive": True,
@@ -141,6 +150,7 @@ def get_status() -> dict[str, Any]:
         "activeUrl": active_url,
         "endpoints": {
             "llm": llm_url,
+            "comfy": comfy_url,
             "control": f"http://{config.LAN_IP}:{config.CONTROL_PORT}",
         },
         "services": services,
@@ -152,7 +162,8 @@ def get_status() -> dict[str, Any]:
 def start_profile(profile_id: str) -> dict[str, Any]:
     if profile_id not in config.VALID_PROFILES:
         raise ValueError(f"Unknown profile: {profile_id}")
-    proc = _run_control("start", profile_id, check=False)
+    timeout = 240 if profile_id == "comfyui" else _CONTROL_TIMEOUT_SEC
+    proc = _run_control("start", profile_id, check=False, timeout=timeout)
     if proc.returncode != 0:
         parts = [p for p in (proc.stdout.strip(), proc.stderr.strip()) if p]
         detail = "\n".join(parts) if parts else "start failed"
@@ -163,12 +174,14 @@ def start_profile(profile_id: str) -> dict[str, Any]:
 def wait_for_profile(
     profile_id: str,
     *,
-    timeout_sec: float = 60.0,
+    timeout_sec: float | None = None,
     poll_sec: float = 2.0,
 ) -> dict[str, Any]:
     """Poll until the requested profile is LOADED or timeout/failure."""
     if profile_id not in config.VALID_PROFILES:
         raise ValueError(f"Unknown profile: {profile_id}")
+    if timeout_sec is None:
+        timeout_sec = 180.0 if profile_id == "comfyui" else 60.0
     deadline = time.monotonic() + timeout_sec
     last: dict[str, Any] = {}
 

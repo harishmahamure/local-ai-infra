@@ -37,13 +37,15 @@ Commands:
 Profiles:
   llama-fast          Qwen3.6-35B-A3B RotorQuant + vision on :8080
   gemma               Gemma 4 E4B text + vision on :8080
+  comfyui             Qwen-Image 2512 + Edit on :8188
 
 Dashboard:   \${GPU_CONTROL_URL:-http://192.168.50.100:8090}/
 Docs:        \${GPU_CONTROL_URL:-http://192.168.50.100:8090}/docs
 
 Examples:
-  ai start gemma
+  ai   start gemma
   ai start llama-fast
+  ai start comfyui
   ai download gemma-4-e4b
 EOF
 }
@@ -88,6 +90,7 @@ case "$cmd" in
     case "$profile" in
       llama-fast) model_id="qwen36-35b-a3b-rq" ;;
       gemma) model_id="gemma-4-e4b" ;;
+      comfyui) model_id="qwen-image-2512-fp8" ;;
       *) echo "Unknown profile: ${profile}" >&2; usage; exit 1 ;;
     esac
     api_mutate POST "/v1/models/${model_id}/load" >/dev/null

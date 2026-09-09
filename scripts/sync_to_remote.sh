@@ -24,6 +24,8 @@ rsync -avz --delete \
   --exclude 'catalog/installed.json' \
   --exclude '__pycache__' \
   --exclude '.DS_Store' \
+  --exclude 'web/node_modules' \
+  --exclude 'web/dist' \
   "${ROOT}/" "${HOST}:${REMOTE_DIR}/"
 
 ssh "${HOST}" "bash -s" <<REMOTE

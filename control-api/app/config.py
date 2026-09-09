@@ -16,10 +16,16 @@ DOWNLOAD_ENV = Path(os.environ.get("DOWNLOAD_ENV", CONFIG / "download.env"))
 
 LAN_IP = os.environ.get("LAN_BIND_IP", "192.168.50.100")
 LLAMA_PORT = int(os.environ.get("LLAMA_PORT", "8080"))
+COMFY_PORT = int(os.environ.get("COMFY_PORT", "8188"))
 CONTROL_PORT = int(os.environ.get("CONTROL_PORT", "8090"))
 AI_VENV = Path(os.environ.get("AI_VENV", HOME / "ai-inference" / "venv"))
 PYTHON = AI_VENV / "bin" / "python"
+STATE_DIR = Path(os.environ.get("AI_STATE", HOME / "ai-inference" / "state"))
+ASSET_DIR = Path(os.environ.get("AI_ASSETS", HOME / "ai-inference" / "assets"))
+JOBS_DB = Path(os.environ.get("AI_JOBS_DB", STATE_DIR / "jobs.db"))
+COMFY_URL = os.environ.get("COMFY_URL", f"http://{LAN_IP}:{COMFY_PORT}")
+COMFYUI_MODELS = Path(os.environ.get("COMFYUI_MODELS", HOME / "model_backup" / "comfyui"))
 
-VALID_PROFILES = {"llama-fast", "gemma"}
+VALID_PROFILES = {"llama-fast", "gemma", "comfyui"}
 COMMERCIAL_MODE = os.environ.get("AI_COMMERCIAL_MODE", "true").lower() in {"1", "true", "yes"}
 CATALOG_DIR = Path(os.environ.get("AI_CATALOG_DIR", ROOT / "catalog"))

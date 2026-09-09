@@ -28,9 +28,14 @@ Downloader **refuses** any model whose `license` field is not listed here.
 
 ## Current catalog
 
-All entries in `models.yaml` are `commercial: true`. Image, video, and speech weights on `/data/model_backup` are not in this catalog until those runtimes are re-planned.
+Image, video, and speech weights on `/data/model_backup` that are not listed in the table stay unused until those runtimes are planned.
 
 | Bundle | Family | License | Use for |
 |--------|--------|---------|---------|
 | `gemma-4-e4b` | Gemma 4 E4B Q4_K_M + mmproj | Gemma Terms | text + vision chat (128K) |
 | `qwen36-35b-a3b-rq` | Qwen3.6-35B-A3B RotorQuant Q4 + mmproj | Apache-2.0 | text + vision chat (262K native, 1M YaRN) |
+| `qwen-image-2512-fp8` | Qwen-Image 2512 fp8 + VL encoder + VAE | Apache-2.0 | text-to-image character / location / prop / attire |
+| `qwen-image-2512-lightning-lora` | 4-step Lightning LoRA | Apache-2.0 | fast drafts (`fast=true`) |
+| `qwen-image-edit-2511-fp8` | Qwen-Image-Edit 2511 fp8 + Lightning 4-step LoRA | Apache-2.0 | turnaround, keyframe, shot reference, dress-on, face-lock character, `fast=true` |
+| `qwen-controlnet-diffsynth` | DiffSynth inpaint patch + Lightning LoRA | Apache-2.0 | inpaint / outpaint |
+| `upscalers-esrgan` | RealESRGAN x2 / x4 | MIT | `upscale_asset` |

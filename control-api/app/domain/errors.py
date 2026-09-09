@@ -18,10 +18,22 @@ class ErrorCode(str, Enum):
     LICENSE_RESTRICTED = "LICENSE_RESTRICTED"
     UNSUPPORTED_OPERATION = "UNSUPPORTED_OPERATION"
     INTERNAL_ERROR = "INTERNAL_ERROR"
+    GPU_BUSY = "GPU_BUSY"
+    COMFYUI_UNAVAILABLE = "COMFYUI_UNAVAILABLE"
+    GENERATION_FAILED = "GENERATION_FAILED"
+    GENERATION_TIMEOUT = "GENERATION_TIMEOUT"
+    ASSET_NOT_FOUND = "ASSET_NOT_FOUND"
+    CANCELLED = "CANCELLED"
 
     @property
     def retry_category(self) -> RetryCategory:
-        if self in {ErrorCode.MODEL_DOWNLOAD_FAILED, ErrorCode.INTERNAL_ERROR}:
+        if self in {
+            ErrorCode.MODEL_DOWNLOAD_FAILED,
+            ErrorCode.INTERNAL_ERROR,
+            ErrorCode.GPU_BUSY,
+            ErrorCode.COMFYUI_UNAVAILABLE,
+            ErrorCode.GENERATION_TIMEOUT,
+        }:
             return RetryCategory.RETRYABLE
         return RetryCategory.NON_RETRYABLE
 
@@ -39,6 +51,12 @@ class ErrorCode(str, Enum):
             ErrorCode.MODEL_NOT_AVAILABLE: 409,
             ErrorCode.MODEL_DOWNLOAD_FAILED: 502,
             ErrorCode.INTERNAL_ERROR: 500,
+            ErrorCode.GPU_BUSY: 409,
+            ErrorCode.COMFYUI_UNAVAILABLE: 503,
+            ErrorCode.GENERATION_FAILED: 500,
+            ErrorCode.GENERATION_TIMEOUT: 504,
+            ErrorCode.ASSET_NOT_FOUND: 404,
+            ErrorCode.CANCELLED: 409,
         }
         return mapping[self]
 
