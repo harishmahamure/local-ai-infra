@@ -169,6 +169,22 @@ paths:
       responses:
         "200":
           description: Cursor-paginated jobs
+    delete:
+      tags: [image]
+      summary: Delete jobs
+      parameters:
+        - name: status
+          in: query
+          schema: {type: string}
+          description: If set, only delete jobs in this status. Running jobs are never bulk-deleted.
+        - name: delete_assets
+          in: query
+          schema: {type: boolean, default: true}
+      responses:
+        "200":
+          description: Jobs deleted
+        "400":
+          description: Invalid status, or attempted bulk-delete of running jobs
   /v1/jobs/{job_id}:
     get:
       tags: [image]
@@ -181,6 +197,35 @@ paths:
       responses:
         "200":
           description: Status, phase, progress, assets, error
+    delete:
+      tags: [image]
+      summary: Delete a job
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: delete_assets
+          in: query
+          schema: {type: boolean, default: true}
+          description: Also delete generated images from disk
+      responses:
+        "200":
+          description: Job deleted
+        "400":
+          description: Unknown job, or job is still running
+  /v1/jobs/{job_id}/assets:
+    delete:
+      tags: [image]
+      summary: Delete all images for a job
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Images deleted
   /v1/jobs/{job_id}/events:
     get:
       tags: [image]
@@ -222,6 +267,13 @@ paths:
       responses:
         "201":
           description: Asset metadata
+    delete:
+      tags: [image]
+      summary: Delete all assets from disk
+      description: Skips images still attached to a running job.
+      responses:
+        "200":
+          description: Assets deleted
   /v1/assets/{asset_id}:
     get:
       tags: [image]
@@ -234,6 +286,19 @@ paths:
       responses:
         "200":
           description: Metadata
+        "404":
+          description: Not found
+    delete:
+      tags: [image]
+      summary: Delete an asset and its file on disk
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Asset deleted
         "404":
           description: Not found
   /v1/assets/{asset_id}/content:

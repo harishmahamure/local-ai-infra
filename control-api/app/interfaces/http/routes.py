@@ -143,6 +143,18 @@ def list_jobs(
         return domain_error_response(exc, request)
 
 
+@router.delete("/v1/jobs", summary="Delete jobs", tags=["image"])
+def delete_jobs(
+    request: Request,
+    status: str | None = Query(default=None, description="If set, only delete jobs in this status"),
+    delete_assets: bool = Query(default=True, description="Also delete generated images from disk"),
+):
+    try:
+        return _ok(_jobs(request).delete_jobs(status=status, delete_assets=delete_assets))
+    except DomainError as exc:
+        return domain_error_response(exc, request)
+
+
 @router.get("/v1/jobs/{job_id}", summary="Get job status", tags=["image"])
 def get_job(job_id: str, request: Request):
     try:
@@ -173,12 +185,40 @@ def cancel_job(job_id: str, request: Request):
         return domain_error_response(exc, request)
 
 
+@router.delete("/v1/jobs/{job_id}", summary="Delete a job", tags=["image"])
+def delete_job(
+    job_id: str,
+    request: Request,
+    delete_assets: bool = Query(default=True, description="Also delete generated images from disk"),
+):
+    try:
+        return _ok(_jobs(request).delete_job(job_id, delete_assets=delete_assets))
+    except DomainError as exc:
+        return domain_error_response(exc, request)
+
+
+@router.delete("/v1/jobs/{job_id}/assets", summary="Delete all images for a job", tags=["image"])
+def delete_job_assets(job_id: str, request: Request):
+    try:
+        return _ok(_jobs(request).delete_job_assets(job_id))
+    except DomainError as exc:
+        return domain_error_response(exc, request)
+
+
 @router.post("/v1/assets", summary="Upload an asset", tags=["image"])
 async def upload_asset(request: Request, file: UploadFile = File(...)):
     try:
         data = await file.read()
         record = _jobs(request).assets.write(data, mime_type=file.content_type, filename=file.filename)
         return _ok(_jobs(request).assets.public_dict(record), 201)
+    except DomainError as exc:
+        return domain_error_response(exc, request)
+
+
+@router.delete("/v1/assets", summary="Delete all assets from disk", tags=["image"])
+def delete_all_assets(request: Request):
+    try:
+        return _ok(_jobs(request).delete_all_assets())
     except DomainError as exc:
         return domain_error_response(exc, request)
 
@@ -197,5 +237,13 @@ def get_asset_content(asset_id: str, request: Request):
     try:
         data, record = _jobs(request).assets.read(asset_id)
         return Response(content=data, media_type=record.get("mime_type") or "application/octet-stream")
+    except DomainError as exc:
+        return domain_error_response(exc, request)
+
+
+@router.delete("/v1/assets/{asset_id}", summary="Delete an asset from disk", tags=["image"])
+def delete_asset(asset_id: str, request: Request):
+    try:
+        return _ok(_jobs(request).delete_asset(asset_id))
     except DomainError as exc:
         return domain_error_response(exc, request)

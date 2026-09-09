@@ -114,8 +114,10 @@ button.danger { border-color: #5a3030; background: #2a1818; }
 .job-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
 .job-head h3 { margin: 0; font-size: 0.95rem; }
 .thumbs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.thumb { display: grid; gap: 0.3rem; justify-items: start; }
 .thumbs img { width: 96px; height: 96px; object-fit: cover; border-radius: 6px; background: #0c0f13; }
 .thumbs.large img { width: 180px; height: 180px; }
+.thumb-del { font-size: 0.75rem; padding: 0.25rem 0.5rem; }
 .filters { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.25rem; }
 .endpoint dt { color: var(--muted); font-size: 0.75rem; }
 .endpoint dd { margin: 0.15rem 0 0.75rem; font-family: ui-monospace, monospace; word-break: break-all; }

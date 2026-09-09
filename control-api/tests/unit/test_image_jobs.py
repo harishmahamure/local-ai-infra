@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 
 from app.application.image_ops import plan_operation, step_to_plan
 from app.application.jobs import JobService
 from app.domain.errors import DomainError
 from app.domain.jobs import Job, JobStatus, can_transition
 from app.domain.operations import DEFAULT_NEGATIVE, DEFAULT_SHIFT, STYLE_PRESETS
+from app.infrastructure.assets import AssetStore
 from app.infrastructure.comfy.graphs import (
     MODELS,
     build_edit,
@@ -457,3 +459,160 @@ def test_idempotency_returns_same_job(tmp_path) -> None:
     assert keyframe["defaultCfg"] == 3.0
     assert character["defaultShift"] == DEFAULT_SHIFT
     assert {item["id"] for item in listed["capabilities"]["stylePresets"]} == set(STYLE_PRESETS)
+
+
+def test_delete_job_and_asset_removes_files(tmp_path) -> None:
+    store = JobStore(tmp_path / "jobs.db")
+    assets = AssetStore(tmp_path / "assets", store)
+
+    class Dummy:
+        def start(self):
+            return None
+
+        def stop(self):
+            return None
+
+        def interrupt_active(self):
+            return None
+
+    class Sched:
+        def snapshot(self):
+            return {}
+
+        def is_busy(self):
+            return False
+
+        def active_job(self):
+            return None
+
+    svc = JobService(store=store, assets=assets, scheduler=Sched(), worker=Dummy())
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
+    first = assets.write(png, mime_type="image/png", filename="one.png")
+    second = assets.write(png + b"x", mime_type="image/png", filename="two.png")
+    path = Path(first["path"])
+    assert path.is_file()
+
+    queued = svc.submit({"operation": "generate_prop", "prompt": "lantern"})
+    job = store.get(queued["job_id"])
+    assert job is not None
+    job.asset_ids = [first["asset_id"], second["asset_id"]]
+    job.status = JobStatus.SUCCEEDED
+    job.phase = "done"
+    store.save(job)
+
+    running = svc.submit({"operation": "generate_prop", "prompt": "still running"})
+    live = store.get(running["job_id"])
+    assert live is not None
+    live.status = JobStatus.RUNNING
+    live.phase = "rendering"
+    store.save(live)
+    try:
+        svc.delete_job(live.job_id)
+        raise AssertionError("expected running job reject")
+    except DomainError as exc:
+        assert exc.code.value == "INVALID_REQUEST"
+
+    deleted = svc.delete_job(job.job_id)
+    assert deleted["deleted"] is True
+    assert set(deleted["deleted_assets"]) == {first["asset_id"], second["asset_id"]}
+    assert store.get(job.job_id) is None
+    assert store.get_asset(first["asset_id"]) is None
+    assert not path.exists()
+
+    leftover = assets.write(png, mime_type="image/png", filename="keep.png")
+    shared = assets.write(png, mime_type="image/png", filename="shared.png")
+    assert leftover["path"] == shared["path"]
+    first_del = svc.delete_asset(leftover["asset_id"])
+    assert first_del["file_removed"] is False
+    assert Path(shared["path"]).is_file()
+    gone = svc.delete_asset(shared["asset_id"])
+    assert gone["deleted"] is True
+    assert gone["file_removed"] is True
+    assert not Path(shared["path"]).exists()
+    try:
+        assets.get(leftover["asset_id"])
+        raise AssertionError("expected missing asset")
+    except DomainError as exc:
+        assert exc.code.value == "ASSET_NOT_FOUND"
+
+
+def test_delete_all_jobs_and_assets(tmp_path) -> None:
+    store = JobStore(tmp_path / "jobs.db")
+    assets = AssetStore(tmp_path / "assets", store)
+
+    class Dummy:
+        def start(self):
+            return None
+
+        def stop(self):
+            return None
+
+        def interrupt_active(self):
+            return None
+
+    class Sched:
+        def snapshot(self):
+            return {}
+
+        def is_busy(self):
+            return False
+
+        def active_job(self):
+            return None
+
+    svc = JobService(store=store, assets=assets, scheduler=Sched(), worker=Dummy())
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
+    one = assets.write(png, mime_type="image/png", filename="one.png")
+    two = assets.write(png + b"y", mime_type="image/png", filename="two.png")
+    keep = assets.write(png + b"z", mime_type="image/png", filename="keep.png")
+
+    done = svc.submit({"operation": "generate_prop", "prompt": "done"})
+    done_job = store.get(done["job_id"])
+    assert done_job is not None
+    done_job.asset_ids = [one["asset_id"]]
+    done_job.status = JobStatus.SUCCEEDED
+    done_job.phase = "done"
+    store.save(done_job)
+
+    queued = svc.submit({"operation": "generate_prop", "prompt": "queued"})
+    live = svc.submit({"operation": "generate_prop", "prompt": "live"})
+    live_job = store.get(live["job_id"])
+    assert live_job is not None
+    live_job.asset_ids = [keep["asset_id"]]
+    live_job.status = JobStatus.RUNNING
+    live_job.phase = "rendering"
+    store.save(live_job)
+
+    try:
+        svc.delete_jobs(status="RUNNING")
+        raise AssertionError("expected running bulk-delete reject")
+    except DomainError as exc:
+        assert exc.code.value == "INVALID_REQUEST"
+
+    purged = svc.delete_jobs()
+    assert queued["job_id"] in purged["deleted_jobs"]
+    assert done["job_id"] in purged["deleted_jobs"]
+    assert live["job_id"] not in purged["deleted_jobs"]
+    assert purged["skipped_running"] == 1
+    assert one["asset_id"] in purged["deleted_assets"]
+    assert store.get(done["job_id"]) is None
+    assert store.get(queued["job_id"]) is None
+    assert store.get(live["job_id"]) is not None
+
+    leftover = svc.submit({"operation": "generate_prop", "prompt": "extra"})
+    extra = store.get(leftover["job_id"])
+    assert extra is not None
+    extra.asset_ids = [two["asset_id"]]
+    extra.status = JobStatus.SUCCEEDED
+    extra.phase = "done"
+    store.save(extra)
+    cleared = svc.delete_job_assets(extra.job_id)
+    assert cleared["deleted_assets"] == [two["asset_id"]]
+    assert store.get_asset(two["asset_id"]) is None
+    assert store.get(extra.job_id) is not None
+    assert store.get(extra.job_id).asset_ids == []
+
+    remaining = svc.delete_all_assets()
+    assert keep["asset_id"] not in remaining["deleted_assets"]
+    assert remaining["skipped_running"] == 1
+    assert store.get_asset(keep["asset_id"]) is not None

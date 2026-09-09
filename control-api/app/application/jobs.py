@@ -117,6 +117,93 @@ class JobService:
         self.store.save(job)
         return job.to_public_dict()
 
+    def delete_job(self, job_id: str, *, delete_assets: bool = True) -> dict[str, Any]:
+        job = self.store.get(job_id)
+        if job is None:
+            raise DomainError(ErrorCode.INVALID_REQUEST, f"Unknown job {job_id}")
+        if job.status == JobStatus.RUNNING:
+            raise DomainError(ErrorCode.INVALID_REQUEST, "Job is running; cancel it first")
+        outputs = list(job.asset_ids)
+        if not self.store.delete_job(job_id):
+            raise DomainError(ErrorCode.INVALID_REQUEST, f"Unknown job {job_id}")
+        removed: list[str] = []
+        if delete_assets and self.assets is not None:
+            for asset_id in outputs:
+                try:
+                    self.assets.delete(asset_id)
+                    removed.append(asset_id)
+                except DomainError as exc:
+                    if exc.code != ErrorCode.ASSET_NOT_FOUND:
+                        raise
+        return {"job_id": job_id, "deleted": True, "deleted_assets": removed}
+
+    def delete_jobs(self, *, status: str | None = None, delete_assets: bool = True) -> dict[str, Any]:
+        if status:
+            try:
+                parsed = JobStatus(status)
+            except ValueError as exc:
+                raise DomainError(ErrorCode.INVALID_PARAMETER, f"Unknown status {status}") from exc
+            if parsed == JobStatus.RUNNING:
+                raise DomainError(ErrorCode.INVALID_REQUEST, "Cannot bulk-delete running jobs; cancel them first")
+        deleted_jobs: list[str] = []
+        deleted_assets: list[str] = []
+        skipped_running = 0
+        for job in self.store.list_all_jobs(status=status):
+            if job.status == JobStatus.RUNNING:
+                skipped_running += 1
+                continue
+            result = self.delete_job(job.job_id, delete_assets=delete_assets)
+            deleted_jobs.append(result["job_id"])
+            deleted_assets.extend(result["deleted_assets"])
+        return {
+            "deleted": True,
+            "deleted_jobs": deleted_jobs,
+            "deleted_assets": deleted_assets,
+            "skipped_running": skipped_running,
+        }
+
+    def delete_job_assets(self, job_id: str) -> dict[str, Any]:
+        job = self.store.get(job_id)
+        if job is None:
+            raise DomainError(ErrorCode.INVALID_REQUEST, f"Unknown job {job_id}")
+        if self.assets is None:
+            raise DomainError(ErrorCode.INTERNAL_ERROR, "Asset store is not enabled")
+        removed: list[str] = []
+        for asset_id in list(job.asset_ids):
+            try:
+                self.assets.delete(asset_id)
+                removed.append(asset_id)
+            except DomainError as exc:
+                if exc.code != ErrorCode.ASSET_NOT_FOUND:
+                    raise
+        return {"job_id": job_id, "deleted": True, "deleted_assets": removed}
+
+    def delete_all_assets(self) -> dict[str, Any]:
+        if self.assets is None:
+            raise DomainError(ErrorCode.INTERNAL_ERROR, "Asset store is not enabled")
+        protected: set[str] = set()
+        for job in self.store.list_all_jobs(status=JobStatus.RUNNING.value):
+            protected.update(job.asset_ids)
+        removed: list[str] = []
+        skipped = 0
+        for record in self.store.list_all_assets():
+            asset_id = str(record["asset_id"])
+            if asset_id in protected:
+                skipped += 1
+                continue
+            try:
+                self.assets.delete(asset_id)
+                removed.append(asset_id)
+            except DomainError as exc:
+                if exc.code != ErrorCode.ASSET_NOT_FOUND:
+                    raise
+        return {"deleted": True, "deleted_assets": removed, "skipped_running": skipped}
+
+    def delete_asset(self, asset_id: str) -> dict[str, Any]:
+        if self.assets is None:
+            raise DomainError(ErrorCode.INTERNAL_ERROR, "Asset store is not enabled")
+        return self.assets.delete(asset_id)
+
     def events(self, job_id: str) -> Iterator[dict[str, Any]]:
         last: str | None = None
         while True:

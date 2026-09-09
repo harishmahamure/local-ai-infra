@@ -215,6 +215,22 @@ class JobStore:
         next_cursor = rows[limit]["created_at"] if len(rows) > limit else None
         return jobs, next_cursor
 
+    def list_all_jobs(self, *, status: str | None = None) -> list[Job]:
+        sql = "SELECT * FROM jobs"
+        args: list[Any] = []
+        if status:
+            sql += " WHERE status = ?"
+            args.append(status)
+        sql += " ORDER BY created_at DESC"
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(sql, args).fetchall()
+        return [_row_to_job(row) for row in rows]
+
+    def list_all_assets(self) -> list[dict[str, Any]]:
+        with self._lock, self._connect() as conn:
+            rows = conn.execute("SELECT * FROM assets ORDER BY created_at DESC").fetchall()
+        return [dict(row) for row in rows]
+
     def save_asset(self, record: dict[str, Any]) -> None:
         with self._lock, self._connect() as conn:
             conn.execute(
@@ -249,6 +265,35 @@ class JobStore:
         if not row:
             return None
         return dict(row)
+
+    def delete_job(self, job_id: str) -> bool:
+        with self._lock, self._connect() as conn:
+            cur = conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
+            return cur.rowcount > 0
+
+    def count_assets_with_path(self, path: str) -> int:
+        with self._lock, self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS n FROM assets WHERE path = ?", (path,)).fetchone()
+        return int(row["n"] if row else 0)
+
+    def delete_asset_record(self, asset_id: str) -> dict[str, Any] | None:
+        with self._lock, self._connect() as conn:
+            row = conn.execute("SELECT * FROM assets WHERE asset_id = ?", (asset_id,)).fetchone()
+            if not row:
+                return None
+            record = dict(row)
+            conn.execute("DELETE FROM assets WHERE asset_id = ?", (asset_id,))
+        return record
+
+    def unref_asset(self, asset_id: str) -> None:
+        with self._lock, self._connect() as conn:
+            rows = conn.execute("SELECT * FROM jobs WHERE instr(asset_ids, ?) > 0", (asset_id,)).fetchall()
+        for row in rows:
+            job = _row_to_job(row)
+            if asset_id not in job.asset_ids:
+                continue
+            job.asset_ids = [item for item in job.asset_ids if item != asset_id]
+            self.save(job)
 
 
 def _row_to_job(row: sqlite3.Row) -> Job:

@@ -99,3 +99,20 @@ class AssetStore:
             "created_at": record["created_at"],
             "filename": record.get("filename"),
         }
+
+    def delete(self, asset_id: str) -> dict[str, Any]:
+        record = self.get(asset_id)
+        path = Path(str(record["path"])).resolve()
+        root = self.root.resolve()
+        if path != root and root not in path.parents:
+            raise DomainError(ErrorCode.INTERNAL_ERROR, f"Asset path is outside the assets root for {asset_id}")
+        remaining = self._jobs.count_assets_with_path(str(record["path"]))
+        file_removed = False
+        if remaining <= 1 and path.is_file():
+            path.unlink()
+            file_removed = True
+        deleted = self._jobs.delete_asset_record(asset_id)
+        if deleted is None:
+            raise DomainError(ErrorCode.ASSET_NOT_FOUND, f"Asset {asset_id} not found")
+        self._jobs.unref_asset(asset_id)
+        return {**self.public_dict(record), "deleted": True, "file_removed": file_removed}

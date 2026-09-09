@@ -10,7 +10,7 @@ export function JobDetail() {
   const { jobs } = useStore();
   const [live, setLive] = useState<Job | null>(null);
   const listed = jobs.find((job) => job.job_id === id);
-  const job = live || listed;
+  const job = live && listed ? { ...live, ...listed } : live || listed;
 
   useEffect(() => {
     if (!id) return;

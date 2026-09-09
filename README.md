@@ -66,12 +66,17 @@ cd web && npm run build
 | GET | `/v1/image/operations` | The 10 Qwen image ops |
 | POST | `/v1/image/jobs` | Queue one image job (202). Header `Idempotency-Key` optional |
 | GET | `/v1/jobs` | Job list (`status`, cursor pagination) |
+| DELETE | `/v1/jobs` | Delete jobs (`status` optional; skips running). `delete_assets=true` removes files |
 | GET | `/v1/jobs/{id}` | Status, phase, progress, assets |
 | GET | `/v1/jobs/{id}/events` | SSE progress |
 | POST | `/v1/jobs/{id}/cancel` | Cancel queued/running job |
+| DELETE | `/v1/jobs/{id}` | Delete job (`delete_assets=true` also removes generated files) |
+| DELETE | `/v1/jobs/{id}/assets` | Delete all images for one job |
 | POST | `/v1/assets` | Multipart upload |
+| DELETE | `/v1/assets` | Delete all images on disk (skips files on a running job) |
 | GET | `/v1/assets/{id}` | Asset metadata |
 | GET | `/v1/assets/{id}/content` | Image bytes |
+| DELETE | `/v1/assets/{id}` | Delete image metadata and file on the GPU box |
 | GET | `/v1/downloads` | Download state |
 | POST | `/v1/downloads` | Queue a catalog download |
 
