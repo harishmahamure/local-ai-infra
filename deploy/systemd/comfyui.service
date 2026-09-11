@@ -2,7 +2,7 @@
 Description=ComfyUI image generation (Qwen-Image dynamic graphs)
 After=network-online.target
 Wants=network-online.target
-Conflicts=llama-fast.service gemma.service
+Conflicts=llama-fast.service gemma.service comfy-ltx.service
 StartLimitIntervalSec=120
 StartLimitBurst=3
 

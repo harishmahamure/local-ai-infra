@@ -38,6 +38,7 @@ Profiles:
   llama-fast          Qwen3.6-35B-A3B RotorQuant + vision on :8080
   gemma               Gemma 4 E4B text + vision on :8080
   comfyui             Qwen-Image 2512 + Edit on :8188
+  comfy-ltx           LTX 2.5 live wallpaper I2V on :8189
 
 Dashboard:   \${GPU_CONTROL_URL:-http://192.168.50.100:8090}/
 Docs:        \${GPU_CONTROL_URL:-http://192.168.50.100:8090}/docs
@@ -46,6 +47,7 @@ Examples:
   ai   start gemma
   ai start llama-fast
   ai start comfyui
+  ai start comfy-ltx
   ai download gemma-4-e4b
 EOF
 }

@@ -115,7 +115,7 @@ class ControlServices:
         if self.jobs and self.jobs.scheduler.is_busy():
             raise DomainError(
                 ErrorCode.GPU_BUSY,
-                "An image job is using the GPU; wait for it to finish or cancel it",
+                "A GPU job is using the GPU; wait for it to finish or cancel it",
                 {"active_job": self.jobs.scheduler.active_job()},
             )
 

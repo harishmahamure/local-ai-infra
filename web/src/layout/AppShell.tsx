@@ -6,6 +6,8 @@ const NAV = [
   { to: "/", label: "Overview", end: true },
   { to: "/runtime", label: "Runtime" },
   { to: "/images", label: "Images" },
+  { to: "/wallpapers", label: "Wallpapers" },
+  { to: "/shots", label: "Shots" },
   { to: "/jobs", label: "Jobs" },
   { to: "/models", label: "Models" },
   { to: "/downloads", label: "Downloads" },

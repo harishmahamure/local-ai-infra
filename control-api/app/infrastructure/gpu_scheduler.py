@@ -6,6 +6,8 @@ from typing import Any
 
 from ..domain.errors import DomainError, ErrorCode
 
+COMFY_PROFILES = frozenset({"comfyui", "comfy-ltx"})
+
 
 @dataclass
 class ResourceLease:
@@ -14,7 +16,7 @@ class ResourceLease:
 
 
 class GpuScheduler:
-    """Single-GPU scheduler: concurrency 1, auto-switch to ComfyUI."""
+    """Single-GPU scheduler: concurrency 1, auto-switch to the job's Comfy profile."""
 
     def __init__(self, runtime_module: Any) -> None:
         self._runtime = runtime_module
@@ -27,7 +29,9 @@ class GpuScheduler:
     def active_job(self) -> str | None:
         return self._active_job
 
-    def acquire(self, job_id: str) -> ResourceLease:
+    def acquire(self, job_id: str, profile: str = "comfyui") -> ResourceLease:
+        if profile not in COMFY_PROFILES:
+            raise DomainError(ErrorCode.INVALID_PARAMETER, f"Unknown GPU profile {profile}")
         with self._lock:
             if self._active_job and self._active_job != job_id:
                 raise DomainError(
@@ -37,13 +41,28 @@ class GpuScheduler:
                 )
             self._active_job = job_id
         try:
-            self._ensure_comfyui()
+            self._ensure_profile(profile)
         except Exception:
             with self._lock:
                 if self._active_job == job_id:
                     self._active_job = None
             raise
-        return ResourceLease(job_id=job_id, profile="comfyui")
+        return ResourceLease(job_id=job_id, profile=profile)
+
+    def switch(self, lease: ResourceLease, profile: str) -> ResourceLease:
+        if profile not in COMFY_PROFILES:
+            raise DomainError(ErrorCode.INVALID_PARAMETER, f"Unknown GPU profile {profile}")
+        if profile == lease.profile:
+            return lease
+        with self._lock:
+            if self._active_job and self._active_job != lease.job_id:
+                raise DomainError(
+                    ErrorCode.INTERNAL_ERROR,
+                    "GPU worker invariant violated: concurrent switch",
+                    {"active_job": self._active_job, "requested": lease.job_id},
+                )
+        self._ensure_profile(profile)
+        return ResourceLease(job_id=lease.job_id, profile=profile)
 
     def release(self, lease: ResourceLease) -> None:
         with self._lock:
@@ -53,20 +72,21 @@ class GpuScheduler:
     def snapshot(self) -> dict[str, Any]:
         return {"activeJobId": self._active_job, "busy": self._active_job is not None}
 
-    def _ensure_comfyui(self) -> None:
+    def _ensure_profile(self, profile: str) -> None:
         try:
             status = self._runtime.get_status()
         except Exception as exc:
             raise DomainError(ErrorCode.COMFYUI_UNAVAILABLE, str(exc)) from exc
         current = str(status.get("profile") or "none")
-        if current == "comfyui" and status.get("loadState") == "LOADED":
+        if current == profile and status.get("loadState") == "LOADED":
             return
         try:
-            if current not in {"none", "comfyui"} and not str(current).startswith("CONFLICT"):
+            if current not in {"none", profile} and not str(current).startswith("CONFLICT"):
                 self._runtime.stop_profile()
-            self._runtime.start_profile("comfyui")
+            self._runtime.start_profile(profile)
             if hasattr(self._runtime, "wait_for_profile"):
-                self._runtime.wait_for_profile("comfyui", timeout_sec=180)
+                timeout = 240 if profile == "comfy-ltx" else 180
+                self._runtime.wait_for_profile(profile, timeout_sec=timeout)
         except DomainError:
             raise
         except Exception as exc:

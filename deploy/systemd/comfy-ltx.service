@@ -1,0 +1,26 @@
+[Unit]
+Description=ComfyUI LTX 2.5 live wallpaper (image-to-video)
+After=network-online.target
+Wants=network-online.target
+Conflicts=llama-fast.service gemma.service comfyui.service
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=@HOME@/ComfyUI
+Environment=PYTHONUNBUFFERED=1
+Environment=COMFYUI_HOME=@HOME@/ComfyUI
+Environment=COMFY_PORT=8189
+ExecStartPre=@HOME@/ai-inference/control/scripts/remote/ensure-exclusive.sh comfy-ltx.service
+ExecStart=@HOME@/ai-inference/control/scripts/remote/comfyui.sh
+KillMode=mixed
+TimeoutStopSec=45
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:@HOME@/ai-inference/logs/comfy-ltx.log
+StandardError=append:@HOME@/ai-inference/logs/comfy-ltx.log
+
+[Install]
+# Do not enable — start only via `ai start comfy-ltx` so one profile occupies the GPU.
+WantedBy=default.target

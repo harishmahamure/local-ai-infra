@@ -5,14 +5,15 @@ set -euo pipefail
 LAN_IP="${LAN_BIND_IP:-192.168.50.100}"
 LLAMA_PORT="${LLAMA_PORT:-8080}"
 COMFY_PORT="${COMFY_PORT:-8188}"
+COMFY_LTX_PORT="${COMFY_LTX_PORT:-8189}"
 CONTROL="${AI_CONTROL:-$HOME/ai-inference/control}"
 EXCLUSIVE="${CONTROL}/scripts/remote/ensure-exclusive.sh"
 
-UNITS=(llama-fast gemma comfyui)
+UNITS=(llama-fast gemma comfyui comfy-ltx)
 
 usage() {
   cat <<EOF
-Usage: control.sh <status|start|stop|switch|models> [llama-fast|gemma|comfyui]
+Usage: control.sh <status|start|stop|switch|models> [llama-fast|gemma|comfyui|comfy-ltx]
 EOF
   exit 1
 }
@@ -114,6 +115,9 @@ print_urls() {
     comfyui)
       echo "Active URL: http://${LAN_IP}:${COMFY_PORT:-8188}"
       ;;
+    comfy-ltx)
+      echo "Active URL: http://${LAN_IP}:${COMFY_LTX_PORT:-8189}"
+      ;;
     none|"")
       echo "Active URL: none (GPU idle)"
       echo "  LLM: http://${LAN_IP}:${LLAMA_PORT}/v1   (start llama-fast|gemma)"
@@ -135,6 +139,9 @@ loaded_model_hint() {
       ;;
     comfyui)
       echo "Qwen-Image 2512 + Edit (ComfyUI :8188)"
+      ;;
+    comfy-ltx)
+      echo "LTX 2.5 live wallpaper (ComfyUI :8189)"
       ;;
     none)
       echo "none — GPU idle"
@@ -176,6 +183,14 @@ cmd_status() {
         load_state="STARTING"
         api_state="not responding"
       fi
+    elif [[ "$active" == "comfy-ltx" ]]; then
+      if http_ok "http://${LAN_IP}:${COMFY_LTX_PORT}/system_stats"; then
+        load_state="LOADED"
+        api_state="ready"
+      else
+        load_state="STARTING"
+        api_state="not responding"
+      fi
     elif http_ok "http://${LAN_IP}:${LLAMA_PORT}/v1/models" || http_ok "http://${LAN_IP}:${LLAMA_PORT}/health"; then
       load_state="LOADED"
       api_state="ready"
@@ -211,7 +226,7 @@ cmd_start() {
   local target="${1:-}"
   [[ -n "$target" ]] || usage
   case "$target" in
-    llama-fast|gemma|comfyui) ;;
+    llama-fast|gemma|comfyui|comfy-ltx) ;;
     *) echo "Unknown profile: $target" >&2; exit 1 ;;
   esac
 
@@ -233,12 +248,15 @@ cmd_start() {
   if [[ "$target" == "comfyui" ]]; then
     health_url="http://${LAN_IP}:${COMFY_PORT:-8188}/system_stats"
     tries=90
+  elif [[ "$target" == "comfy-ltx" ]]; then
+    health_url="http://${LAN_IP}:${COMFY_LTX_PORT:-8189}/system_stats"
+    tries=90
   else
     health_url="http://${LAN_IP}:${LLAMA_PORT}/health"
     tries=30
   fi
   wait_http_or_unit "$health_url" "$target" "$tries" || {
-    if [[ "$target" != "comfyui" ]]; then
+    if [[ "$target" != "comfyui" && "$target" != "comfy-ltx" ]]; then
       wait_http_or_unit "http://${LAN_IP}:${LLAMA_PORT}/v1/models" "$target" 30 || exit 1
     else
       exit 1
@@ -246,6 +264,8 @@ cmd_start() {
   }
   if [[ "$target" == "comfyui" ]]; then
     echo "Ready (LOADED): http://${LAN_IP}:${COMFY_PORT:-8188}"
+  elif [[ "$target" == "comfy-ltx" ]]; then
+    echo "Ready (LOADED): http://${LAN_IP}:${COMFY_LTX_PORT:-8189}"
   else
     echo "Ready (LOADED): http://${LAN_IP}:${LLAMA_PORT}/v1"
   fi

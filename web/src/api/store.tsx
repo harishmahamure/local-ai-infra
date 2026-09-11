@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "./client";
-import type { Capabilities, DownloadsPayload, Job, ModelsPayload, Operation, Status } from "./types";
+import type { Capabilities, DownloadsPayload, Job, ModelsPayload, Operation, ShotCapabilities, Status } from "./types";
 
 const POLL_MS = 2000;
 
@@ -8,7 +8,11 @@ type Store = {
   status: Status | null;
   models: ModelsPayload | null;
   operations: Operation[];
+  videoOperations: Operation[];
+  shotFlows: Operation[];
   capabilities: Capabilities | null;
+  videoCapabilities: Capabilities | null;
+  shotCapabilities: ShotCapabilities | null;
   jobs: Job[];
   downloads: DownloadsPayload | null;
   error: string | null;
@@ -23,7 +27,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [models, setModels] = useState<ModelsPayload | null>(null);
   const [operations, setOperations] = useState<Operation[]>([]);
+  const [videoOperations, setVideoOperations] = useState<Operation[]>([]);
+  const [shotFlows, setShotFlows] = useState<Operation[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
+  const [videoCapabilities, setVideoCapabilities] = useState<Capabilities | null>(null);
+  const [shotCapabilities, setShotCapabilities] = useState<ShotCapabilities | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [downloads, setDownloads] = useState<DownloadsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +39,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextStatus, nextModels, nextDownloads, nextOps, nextJobs] = await Promise.all([
+      const [nextStatus, nextModels, nextDownloads, nextOps, nextVideoOps, nextShots, nextJobs] = await Promise.all([
         api<Status>("/v1/status"),
         api<ModelsPayload>("/v1/models").catch(() => null),
         api<DownloadsPayload>("/v1/downloads").catch(() => null),
         api<{ operations?: Operation[]; capabilities?: Capabilities }>("/v1/image/operations").catch(() => ({ operations: [] as Operation[], capabilities: undefined })),
+        api<{ operations?: Operation[]; capabilities?: Capabilities }>("/v1/video/operations").catch(() => ({ operations: [] as Operation[], capabilities: undefined })),
+        api<{ operations?: Operation[]; capabilities?: ShotCapabilities }>("/v1/shots/flows").catch(() => ({ operations: [] as Operation[], capabilities: undefined })),
         api<{ data?: Job[] }>("/v1/jobs?limit=40").catch(() => ({ data: [] })),
       ]);
       setStatus(nextStatus);
@@ -43,6 +53,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (nextDownloads) setDownloads(nextDownloads);
       setOperations(nextOps.operations || []);
       if (nextOps.capabilities) setCapabilities(nextOps.capabilities);
+      setVideoOperations(nextVideoOps.operations || []);
+      if (nextVideoOps.capabilities) setVideoCapabilities(nextVideoOps.capabilities);
+      setShotFlows(nextShots.operations || []);
+      if (nextShots.capabilities) setShotCapabilities(nextShots.capabilities);
       setJobs(nextJobs.data || []);
       setError(null);
     } catch (err) {
@@ -73,8 +87,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [busy, refresh]);
 
   const value = useMemo(
-    () => ({ status, models, operations, capabilities, jobs, downloads, error, busy, refresh, run }),
-    [status, models, operations, capabilities, jobs, downloads, error, busy, refresh, run],
+    () => ({ status, models, operations, videoOperations, shotFlows, capabilities, videoCapabilities, shotCapabilities, jobs, downloads, error, busy, refresh, run }),
+    [status, models, operations, videoOperations, shotFlows, capabilities, videoCapabilities, shotCapabilities, jobs, downloads, error, busy, refresh, run],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

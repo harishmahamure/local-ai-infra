@@ -17,6 +17,11 @@ def test_ui_paths_serve_react_shell() -> None:
         "/runtime",
         "/images",
         "/images/generate_prop",
+        "/wallpapers",
+        "/wallpapers/generate_devotion_wallpaper",
+        "/wallpapers/generate_video",
+        "/shots",
+        "/shots/shot_single_image",
         "/jobs",
         "/jobs/job_example",
         "/models",
@@ -43,6 +48,10 @@ def test_api_docs_and_assets_untouched() -> None:
     spec = client.get("/openapi.json").json()
     assert "/v1/status" in spec["paths"]
     assert "/v1/text/chat" in spec["paths"]
+    assert "/v1/video/operations" in spec["paths"]
+    assert "/v1/video/jobs" in spec["paths"]
+    assert "/v1/shots/flows" in spec["paths"]
+    assert "/v1/shots/jobs" in spec["paths"]
     docs = client.get("/docs")
     assert docs.status_code == 200
     assert "text/html" in docs.headers["content-type"]

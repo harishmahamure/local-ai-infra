@@ -6,12 +6,20 @@ from typing import Any, Iterator
 
 from ..domain.errors import DomainError, ErrorCode
 from ..domain.jobs import Job, JobStatus
-from ..domain.operations import OPERATIONS, operation_capabilities, operation_catalog
+from ..domain.operations import (
+    OPERATIONS,
+    VIDEO_OPERATIONS,
+    operation_capabilities,
+    operation_catalog,
+    video_operation_capabilities,
+    video_operation_catalog,
+)
+from ..domain.shots import SHOT_OPERATIONS, shot_flow_capabilities, shot_flow_catalog
 from ..infrastructure.assets import AssetStore
 from ..infrastructure.gpu_scheduler import GpuScheduler
 from ..infrastructure.job_store import JobStore
 from ..infrastructure.job_worker import JobWorker
-from .image_ops import plan_operation
+from .image_ops import plan_job
 
 
 def _now() -> str:
@@ -41,7 +49,7 @@ class JobService:
     def stop(self) -> None:
         self.worker.stop()
 
-    def list_operations(self) -> dict[str, Any]:
+    def _ops_payload(self, catalog: list[dict[str, Any]]) -> list[dict[str, Any]]:
         status = {}
         if self._disk_status:
             try:
@@ -49,25 +57,85 @@ class JobService:
             except Exception:
                 status = {}
         ops = []
-        for item in operation_catalog():
+        for item in catalog:
             missing = [bid for bid in item["requiredBundles"] if status and status.get(bid) not in {None, "complete", "ok"}]
-            # If we have a status map, missing bundles that are absent entirely also count.
             if status:
                 missing = [bid for bid in item["requiredBundles"] if status.get(bid, "missing") != "complete"]
             ops.append({**item, "available": not missing, "missingBundles": missing})
-        return {"operations": ops, "capabilities": operation_capabilities()}
+        return ops
+
+    def list_operations(self) -> dict[str, Any]:
+        return {"operations": self._ops_payload(operation_catalog()), "capabilities": operation_capabilities()}
+
+    def list_video_operations(self) -> dict[str, Any]:
+        return {
+            "operations": self._ops_payload(video_operation_catalog()),
+            "capabilities": video_operation_capabilities(),
+        }
+
+    def list_shot_flows(self) -> dict[str, Any]:
+        return {
+            "operations": self._ops_payload(shot_flow_catalog()),
+            "capabilities": shot_flow_capabilities(),
+        }
+
+    def _hydrate_shot(self, body: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        operation = str(body.get("operation") or "").strip()
+        parent_id = str(body.get("parent_job_id") or "").strip()
+        if operation != "shot_regenerate":
+            return operation, body
+        if not parent_id:
+            raise DomainError(ErrorCode.INVALID_REQUEST, "shot_regenerate requires parent_job_id")
+        parent = self.store.get(parent_id)
+        if parent is None:
+            raise DomainError(ErrorCode.INVALID_REQUEST, f"Unknown parent job {parent_id}")
+        merged = {**parent.inputs}
+        for key, value in body.items():
+            if key in {"operation", "parent_job_id"}:
+                continue
+            if value is not None:
+                merged[key] = value
+        merged["parent_job_id"] = parent.job_id
+        source = parent.operation
+        if source == "shot_regenerate":
+            source = str(parent.inputs.get("source_operation") or "shot_single_image")
+        if source in SHOT_OPERATIONS and source != "shot_regenerate":
+            merged["source_operation"] = source
+            return source, merged
+        if source == "generate_live_wallpaper":
+            merged["source_operation"] = "shot_single_image"
+            return "shot_single_image", merged
+        raise DomainError(ErrorCode.INVALID_REQUEST, f"Parent job {parent_id} is not a shot that can be regenerated")
+
+    def _public_job(self, job: Job, *, queue_position: int | None = None) -> dict[str, Any]:
+        payload = job.to_public_dict(queue_position=queue_position)
+        if self.assets is None:
+            return payload
+        assets = []
+        for asset_id in job.asset_ids:
+            try:
+                record = self.assets.get(asset_id)
+                assets.append({"asset_id": asset_id, "mime_type": record.get("mime_type")})
+            except DomainError:
+                assets.append({"asset_id": asset_id})
+        payload["assets"] = assets
+        return payload
 
     def submit(self, body: dict[str, Any], *, idempotency_key: str | None = None) -> dict[str, Any]:
         operation = str(body.get("operation") or "").strip()
-        if operation not in OPERATIONS:
+        payload = dict(body)
+        if operation == "shot_regenerate":
+            operation, payload = self._hydrate_shot(payload)
+        if operation not in OPERATIONS and operation not in VIDEO_OPERATIONS and operation not in SHOT_OPERATIONS:
             raise DomainError(ErrorCode.UNSUPPORTED_OPERATION, f"Unknown operation {operation}")
         if idempotency_key:
             existing = self.store.get_by_idempotency(idempotency_key)
             if existing:
-                return existing.to_public_dict(queue_position=self.store.queue_position(existing.job_id))
-        steps, _refs, _bundles = plan_operation(operation, body)
+                return self._public_job(existing, queue_position=self.store.queue_position(existing.job_id))
+        steps, _refs, _bundles = plan_job(operation, payload)
         seed = steps[0].seed if steps else None
-        inputs = {k: v for k, v in body.items() if k != "operation"}
+        warnings = [note for step in steps for note in step.warnings]
+        inputs = {k: v for k, v in payload.items() if k != "operation"}
         job = Job(
             job_id=f"job_{uuid.uuid4().hex}",
             operation=operation,
@@ -75,19 +143,19 @@ class JobService:
             phase="queued",
             progress=0.0,
             inputs=inputs,
-            parameters={},
+            parameters={"warnings": warnings} if warnings else {},
             created_at=_now(),
             idempotency_key=idempotency_key,
             seed=seed,
         )
         self.store.save(job)
-        return job.to_public_dict(queue_position=self.store.queue_position(job.job_id))
+        return self._public_job(job, queue_position=self.store.queue_position(job.job_id))
 
     def get(self, job_id: str) -> dict[str, Any]:
         job = self.store.get(job_id)
         if job is None:
             raise DomainError(ErrorCode.INVALID_REQUEST, f"Unknown job {job_id}")
-        return job.to_public_dict(queue_position=self.store.queue_position(job.job_id))
+        return self._public_job(job, queue_position=self.store.queue_position(job.job_id))
 
     def list_jobs(self, *, status: str | None = None, cursor: str | None = None, limit: int = 20) -> dict[str, Any]:
         if status:
@@ -97,7 +165,7 @@ class JobService:
                 raise DomainError(ErrorCode.INVALID_PARAMETER, f"Unknown status {status}") from exc
         jobs, next_cursor = self.store.list_jobs(status=status, cursor=cursor, limit=limit)
         return {
-            "data": [job.to_public_dict(queue_position=self.store.queue_position(job.job_id)) for job in jobs],
+            "data": [self._public_job(job, queue_position=self.store.queue_position(job.job_id)) for job in jobs],
             "pagination": {"nextCursor": next_cursor, "hasMore": next_cursor is not None},
         }
 
@@ -115,7 +183,7 @@ class JobService:
         else:
             self.worker.interrupt_active()
         self.store.save(job)
-        return job.to_public_dict()
+        return self._public_job(job)
 
     def delete_job(self, job_id: str, *, delete_assets: bool = True) -> dict[str, Any]:
         job = self.store.get(job_id)
@@ -210,7 +278,7 @@ class JobService:
             job = self.store.get(job_id)
             if job is None:
                 raise DomainError(ErrorCode.INVALID_REQUEST, f"Unknown job {job_id}")
-            payload = job.to_public_dict(queue_position=self.store.queue_position(job.job_id))
+            payload = self._public_job(job, queue_position=self.store.queue_position(job.job_id))
             marker = f"{payload['status']}:{payload['phase']}:{payload['progress']}"
             if marker != last:
                 yield payload

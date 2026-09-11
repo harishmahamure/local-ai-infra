@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from ...application.chat import ControlServices
 from ...domain.errors import DomainError, ErrorCode
 from .errors import domain_error_response
-from .schemas import DownloadRequest, ImageJobRequest, TextChatRequest
+from .schemas import DownloadRequest, ImageJobRequest, ShotJobRequest, TextChatRequest, VideoJobRequest
 
 router = APIRouter(tags=["llama.cpp"])
 
@@ -120,6 +120,48 @@ def list_image_operations(request: Request):
 @router.post("/v1/image/jobs", status_code=202, summary="Queue an image job", tags=["image"])
 def submit_image_job(
     body: ImageJobRequest,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
+    try:
+        payload = body.model_dump(exclude_none=True)
+        return _ok(_jobs(request).submit(payload, idempotency_key=idempotency_key), 202)
+    except DomainError as exc:
+        return domain_error_response(exc, request)
+
+
+@router.get("/v1/video/operations", summary="List video operations", tags=["video"])
+def list_video_operations(request: Request):
+    try:
+        return _ok(_jobs(request).list_video_operations())
+    except DomainError as exc:
+        return domain_error_response(exc, request)
+
+
+@router.get("/v1/shots/flows", summary="List shot generation flows", tags=["shots"])
+def list_shot_flows(request: Request):
+    try:
+        return _ok(_jobs(request).list_shot_flows())
+    except DomainError as exc:
+        return domain_error_response(exc, request)
+
+
+@router.post("/v1/shots/jobs", status_code=202, summary="Queue a shot job", tags=["shots"])
+def submit_shot_job(
+    body: ShotJobRequest,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
+    try:
+        payload = body.model_dump(exclude_none=True)
+        return _ok(_jobs(request).submit(payload, idempotency_key=idempotency_key), 202)
+    except DomainError as exc:
+        return domain_error_response(exc, request)
+
+
+@router.post("/v1/video/jobs", status_code=202, summary="Queue a video job", tags=["video"])
+def submit_video_job(
+    body: VideoJobRequest,
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):

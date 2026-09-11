@@ -62,7 +62,7 @@ models:
     version: "2512"
     provider: Qwen
     estimated_vram: 20
-    supported_operations: [generate_character, generate_location, generate_prop, generate_attire]
+    supported_operations: [generate_character, generate_location, generate_prop, generate_attire, generate_devotion_wallpaper]
     runtime: comfyui
     enabled: true
     files:
@@ -143,7 +143,7 @@ models:
     role: upscale
     provider: RealESRGAN
     estimated_vram: 2
-    supported_operations: [upscale_asset]
+    supported_operations: [upscale_asset, generate_devotion_wallpaper]
     runtime: comfyui
     enabled: true
     files:
@@ -153,3 +153,130 @@ models:
       - repo: uwg/upscaler
         path: Face_Restore/FaceFusion/real_esrgan_x2plus.pth
         local: upscale_models/RealESRGAN_x2plus.pth
+
+  - id: ltx-2.5-distilled
+    license: LTX-2-Community
+    commercial: true
+    gated: true
+    hf_repo: Lightricks/LTX-2.5
+    dest: comfyui
+    vram_gb: 28
+    family: ltx-2.5
+    role: i2v
+    version: "2.5-distilled"
+    provider: Lightricks
+    estimated_vram: 28
+    supported_operations: [generate_live_wallpaper, generate_video]
+    runtime: comfy-ltx
+    enabled: true
+    files:
+      - repo: Lightricks/LTX-2.5
+        path: diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors
+        local: diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors
+      - repo: Lightricks/LTX-2.5
+        path: text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors
+        local: text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors
+      - repo: Lightricks/LTX-2.5
+        path: vae/ltx-2.5-video-vae-bf16.safetensors
+        local: vae/ltx-2.5-video-vae-bf16.safetensors
+      - repo: Lightricks/LTX-2.5
+        path: vae/ltx-2.5-audio-vae-bf16.safetensors
+        local: vae/ltx-2.5-audio-vae-bf16.safetensors
+      - repo: Lightricks/LTX-2.5
+        path: latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
+        local: latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
+        optional: true
+      - repo: Lightricks/LTX-2.5
+        path: diffusion_models/ltx-2.5-22b-distilled-transformer-nvfp4.safetensors
+        local: diffusion_models/ltx-2.5-22b-distilled-transformer-nvfp4.safetensors
+        optional: true
+
+  - id: ltx-2.5-nvfp4
+    license: LTX-2-Community
+    commercial: true
+    gated: true
+    hf_repo: Lightricks/LTX-2.5
+    dest: comfyui
+    vram_gb: 19
+    family: ltx-2.5
+    role: i2v-nvfp4
+    version: "2.5-nvfp4"
+    provider: Lightricks
+    estimated_vram: 19
+    supported_operations: [shot_single_image, shot_start_end, shot_multi_keyframe, shot_action, generate_video]
+    runtime: comfy-ltx
+    enabled: true
+    files:
+      - repo: Lightricks/LTX-2.5
+        path: diffusion_models/ltx-2.5-22b-distilled-transformer-nvfp4.safetensors
+        local: diffusion_models/ltx-2.5-22b-distilled-transformer-nvfp4.safetensors
+
+  - id: ltx-2.5-control
+    license: LTX-2-Community
+    commercial: true
+    gated: true
+    dest: comfyui
+    vram_gb: 1
+    family: ltx-2.5
+    role: ic-lora
+    version: "2.3-ic-lora"
+    provider: Lightricks
+    estimated_vram: 1
+    supported_operations: [shot_motion_reference, shot_camera]
+    runtime: comfy-ltx
+    enabled: true
+    files:
+      - repo: Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control
+        path: ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors
+        local: loras/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors
+      - repo: Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control
+        path: ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors
+        local: loras/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors
+      - repo: Lightricks/LTX-2.3-22b-IC-LoRA-DubIt
+        path: ltx-2.3-22b-ic-lora-dubit-0.9.safetensors
+        local: loras/ltx-2.3-22b-ic-lora-dubit-0.9.safetensors
+
+  # Distilled I2V core plus spatial refine. Download: ./bin/ai download ltx-2.5-studio
+  - id: ltx-2.5-studio
+    license: LTX-2-Community
+    commercial: true
+    gated: true
+    hf_repo: Lightricks/LTX-2.5
+    dest: comfyui
+    vram_gb: 32
+    family: ltx-2.5
+    role: i2v-refine
+    version: "2.5-studio"
+    provider: Lightricks
+    estimated_vram: 32
+    supported_operations: [generate_live_wallpaper, generate_video]
+    runtime: comfy-ltx
+    enabled: true
+    files:
+      - repo: Lightricks/LTX-2.5
+        path: diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors
+        local: diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors
+      - repo: Lightricks/LTX-2.5
+        path: text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors
+        local: text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors
+      - repo: Lightricks/LTX-2.5
+        path: vae/ltx-2.5-video-vae-bf16.safetensors
+        local: vae/ltx-2.5-video-vae-bf16.safetensors
+      - repo: Lightricks/LTX-2.5
+        path: vae/ltx-2.5-audio-vae-bf16.safetensors
+        local: vae/ltx-2.5-audio-vae-bf16.safetensors
+      - repo: Lightricks/LTX-2.5
+        path: latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
+        local: latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
+      - repo: Lightricks/LTX-2.5
+        path: model_patches/ltx-2.5-duration-head-bf16.safetensors
+        local: model_patches/ltx-2.5-duration-head-bf16.safetensors
+        optional: true
+      - repo: Lightricks/LTX-2.5
+        path: latent_upscale_models/ltx-2.5-latent-temporal-upscaler-x2-bf16-1.0.safetensors
+        local: latent_upscale_models/ltx-2.5-latent-temporal-upscaler-x2-bf16-1.0.safetensors
+        optional: true
+      - repo: Lightricks/LTX-2.5
+        path: loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors
+        local: loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors
+        optional: true

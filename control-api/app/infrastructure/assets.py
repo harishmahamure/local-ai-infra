@@ -14,6 +14,8 @@ MIME_EXT = {
     "image/jpeg": ".jpg",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
 }
 
 
@@ -34,6 +36,10 @@ def sniff_mime(data: bytes, fallback: str = "application/octet-stream") -> str:
         return "image/jpeg"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        return "video/mp4"
+    if data[:4] == b"\x1aE\xdf\xa3":
+        return "video/webm"
     return fallback
 
 

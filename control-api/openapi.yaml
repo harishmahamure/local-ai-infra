@@ -3,7 +3,7 @@ info:
   title: GPU Control API
   version: "5.0.0"
   description: |
-    Exclusive GPU control plane: llama.cpp chat + ComfyUI Qwen image jobs.
+    Exclusive GPU control plane: llama.cpp chat, ComfyUI Qwen image jobs, and LTX live wallpapers.
 
     Mac proxy: `http://127.0.0.1:8090` → GPU `http://192.168.50.100:8090`.
 servers:
@@ -15,6 +15,7 @@ tags:
   - name: Health
   - name: llama.cpp
   - name: image
+  - name: video
 paths:
   /health:
     get:
@@ -133,7 +134,7 @@ paths:
       summary: List image operations
       responses:
         "200":
-          description: Ten Qwen operations with schemas and availability
+          description: Eleven Qwen operations with schemas and availability
   /v1/image/jobs:
     post:
       tags: [image]
@@ -149,6 +150,56 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ImageJobRequest"
+      responses:
+        "202":
+          description: Job queued
+  /v1/video/operations:
+    get:
+      tags: [video]
+      summary: List video operations
+      responses:
+        "200":
+          description: Live wallpaper operations and LTX capabilities
+  /v1/video/jobs:
+    post:
+      tags: [video]
+      summary: Queue a video job
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VideoJobRequest"
+      responses:
+        "202":
+          description: Job queued
+  /v1/shots/flows:
+    get:
+      tags: [shots]
+      summary: List shot generation flows
+      responses:
+        "200":
+          description: Shot flows and camera/control capabilities
+  /v1/shots/jobs:
+    post:
+      tags: [shots]
+      summary: Queue a shot job
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShotJobRequest"
       responses:
         "202":
           description: Job queued
@@ -357,8 +408,16 @@ components:
             - inpaint_asset
             - outpaint_asset
             - upscale_asset
+            - generate_devotion_wallpaper
         prompt: {type: string}
         negative_prompt: {type: string}
+        target:
+          type: string
+          enum: [mobile, desktop]
+          description: Wallpaper target for generate_devotion_wallpaper. Default desktop.
+        upscale:
+          type: boolean
+          description: 2x RealESRGAN after devotion wallpaper. Default true.
         style_preset:
           type: string
           enum:
@@ -391,6 +450,69 @@ components:
           $ref: "#/components/schemas/AssetRef"
         location:
           $ref: "#/components/schemas/AssetRef"
+    VideoJobRequest:
+      type: object
+      required: [operation]
+      properties:
+        operation:
+          type: string
+          enum: [generate_live_wallpaper, generate_video]
+        prompt: {type: string}
+        negative_prompt: {type: string}
+        target:
+          type: string
+          enum: [mobile, video]
+          description: mobile portrait or landscape video. Default mobile.
+        width: {type: integer}
+        height: {type: integer}
+        seed: {type: integer}
+        steps: {type: integer}
+        cfg: {type: number}
+        video_cfg: {type: number}
+        duration: {type: number}
+        fps: {type: integer}
+        refine: {type: boolean, default: true}
+        sampler_name: {type: string}
+        image:
+          $ref: "#/components/schemas/AssetRef"
+    ShotJobRequest:
+      type: object
+      required: [operation]
+      properties:
+        operation: {type: string}
+        prompt: {type: string}
+        negative_prompt: {type: string}
+        target: {type: string, enum: [mobile, video]}
+        width: {type: integer}
+        height: {type: integer}
+        seed: {type: integer}
+        steps: {type: integer}
+        duration: {type: number}
+        fps: {type: integer}
+        refine: {type: boolean, default: true}
+        camera: {type: string}
+        control: {type: string}
+        action: {type: string}
+        parent_job_id: {type: string}
+        image:
+          $ref: "#/components/schemas/AssetRef"
+        end_image:
+          $ref: "#/components/schemas/AssetRef"
+        video:
+          $ref: "#/components/schemas/AssetRef"
+        clips:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssetRef"
+        keyframes:
+          type: array
+          items:
+            type: object
+            required: [asset_id]
+            properties:
+              asset_id: {type: string}
+              frame_idx: {type: integer}
+              strength: {type: number}
     AssetRef:
       type: object
       required: [asset_id]

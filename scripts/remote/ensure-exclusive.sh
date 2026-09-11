@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# GPU mutex: at most one inference process (llama-fast | gemma | comfyui).
+# GPU mutex: at most one inference process (llama-fast | gemma | comfyui | comfy-ltx).
 #
 #   ensure-exclusive.sh              stop every managed unit + stray processes
-#   ensure-exclusive.sh UNIT.service ExecStartPre: stop others, free :8080/:8188
+#   ensure-exclusive.sh UNIT.service ExecStartPre: stop others, free :8080/:8188/:8189
 set -u
 
 SELF_UNIT="${1:-}"
 SELF_NAME="${SELF_UNIT%.service}"
-UNITS=(llama-fast gemma comfyui)
-PORTS=(8080 8188)
+UNITS=(llama-fast gemma comfyui comfy-ltx)
+PORTS=(8080 8188 8189)
 LOCK_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 LOCK_FILE="${LOCK_DIR}/ai-inference.profile"
 
@@ -95,7 +95,7 @@ wait_ports_free() {
   done
   echo "warning: inference port still in use after unload wait" >&2
   ss -lntpH "sport = :8080" >&2 || true
-  ss -lntpH "sport = :8188" >&2 || true
+  ss -lntpH "sport = :8189" >&2 || true
   return 1
 }
 

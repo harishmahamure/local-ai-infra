@@ -34,8 +34,8 @@ def create_app(engine: ControlServices | None = None) -> FastAPI:
         redoc_url="/redoc",
         lifespan=lifespan,
         description=(
-            "Control plane: exclusive GPU profiles (llama.cpp chat + ComfyUI Qwen image), "
-            "GGUF downloads, `/v1/text/chat`, and `/v1/image/jobs` (one GPU job at a time).\n\n"
+            "Control plane: exclusive GPU profiles (llama.cpp chat, ComfyUI Qwen image, LTX video), "
+            "GGUF downloads, `/v1/text/chat`, `/v1/image/jobs`, and `/v1/video/jobs` (one GPU job at a time).\n\n"
             "Mac proxy: `http://127.0.0.1:8090` → GPU `http://192.168.50.100:8090`.\n"
             "Interactive docs: `/docs` (Swagger) and `/redoc`."
         ),
@@ -47,6 +47,7 @@ def create_app(engine: ControlServices | None = None) -> FastAPI:
             {"name": "Health", "description": "Liveness and readiness."},
             {"name": "llama.cpp", "description": "Text/vision chat, model load, GGUF downloads."},
             {"name": "image", "description": "Qwen image jobs, assets, and GPU queue."},
+            {"name": "video", "description": "LTX live wallpaper jobs."},
         ],
     )
     app.add_middleware(

@@ -5,8 +5,9 @@ Control plane for a LAN GPU box (RTX 5090). **One profile at a time:**
 - `gemma` — Gemma 4 E4B Q4_K_M + mmproj (text + vision, 128K) on **:8080**
 - `llama-fast` — Qwen3.6-35B-A3B RotorQuant Q4 + mmproj (text + vision, 262K) on **:8080**
 - `comfyui` — Qwen-Image 2512 + Edit (image jobs) on **:8188**
+- `comfy-ltx` — LTX 2.5 video (T2V + live wallpaper I2V) on **:8189**
 
-Submitting an image job auto-switches to ComfyUI (chat returns 409 `GPU_BUSY` until the queue drains and you reload a chat profile).
+Submitting an image or wallpaper job auto-switches to the matching ComfyUI profile (chat returns 409 `GPU_BUSY` until the queue drains and you reload a chat profile).
 
 ## Quick start (Mac)
 
@@ -29,7 +30,7 @@ Bootstrap reuses:
 
 ## Dashboard
 
-Open **http://192.168.50.100:8090/** (or `./bin/ai ui`) for the React control UI: Overview, Runtime, Images, Jobs, Models, and Downloads. Text chat stays API-only (`POST /v1/text/chat`); the Runtime page shows a copyable curl.
+Open **http://192.168.50.100:8090/** (or `./bin/ai ui`) for the React control UI: Overview, Runtime, Images, Wallpapers, Jobs, Models, and Downloads. Text chat stays API-only (`POST /v1/text/chat`); the Runtime page shows a copyable curl.
 
 Local hot reload (proxies `/v1` to the Mac control proxy):
 
@@ -59,12 +60,14 @@ cd web && npm run build
 | GET | `/ready` | 200 if a profile is `LOADED` |
 | GET | `/v1/status` | Runtime + GPU + image queue |
 | GET | `/v1/models` | Catalog disk status + runtime state |
-| POST | `/v1/models/{id}/load` | Start `llama-fast`, `gemma`, or `comfyui` |
+| POST | `/v1/models/{id}/load` | Start `llama-fast`, `gemma`, `comfyui`, or `comfy-ltx` |
 | POST | `/v1/models/{id}/unload` | Stop all GPU profiles |
 | GET | `/v1/text/models` | Chat-capable models |
 | POST | `/v1/text/chat` | Sync JSON, or SSE when `stream=true` |
-| GET | `/v1/image/operations` | The 10 Qwen image ops |
+| GET | `/v1/image/operations` | Qwen image ops including devotion wallpaper |
 | POST | `/v1/image/jobs` | Queue one image job (202). Header `Idempotency-Key` optional |
+| GET | `/v1/video/operations` | LTX video ops |
+| POST | `/v1/video/jobs` | Queue one LTX video job (202) |
 | GET | `/v1/jobs` | Job list (`status`, cursor pagination) |
 | DELETE | `/v1/jobs` | Delete jobs (`status` optional; skips running). `delete_assets=true` removes files |
 | GET | `/v1/jobs/{id}` | Status, phase, progress, assets |
@@ -80,7 +83,9 @@ cd web && npm run build
 | GET | `/v1/downloads` | Download state |
 | POST | `/v1/downloads` | Queue a catalog download |
 
-Image operations: `generate_character`, `generate_character_turnaround`, `generate_attire`, `generate_location`, `generate_prop`, `generate_keyframe`, `generate_shot_reference`, `inpaint_asset`, `outpaint_asset`, `upscale_asset`.
+Image operations: `generate_character`, `generate_character_turnaround`, `generate_attire`, `generate_location`, `generate_prop`, `generate_keyframe`, `generate_shot_reference`, `inpaint_asset`, `outpaint_asset`, `upscale_asset`, `generate_devotion_wallpaper`.
+
+Video operations: `generate_video` (text-to-video, no image) and `generate_live_wallpaper` (image-to-video). Both take `target` `mobile` or `video`.
 
 ## CLI
 
@@ -90,6 +95,7 @@ ai status
 ai start gemma
 ai start llama-fast
 ai start comfyui
+ai start comfy-ltx
 ai stop
 ai download gemma-4-e4b
 ```

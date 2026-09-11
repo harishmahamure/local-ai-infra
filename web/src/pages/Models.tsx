@@ -40,8 +40,12 @@ export function Models() {
   const catalog = models?.models || [];
   const byId = Object.fromEntries(catalog.map((m) => [m.id, m]));
   const bundles = models?.bundles || [];
-  const chat = bundles.filter((b) => (byId[b.id]?.runtime || b.dest) !== "comfyui");
+  const chat = bundles.filter((b) => {
+    const runtime = byId[b.id]?.runtime || b.dest;
+    return runtime !== "comfyui" && runtime !== "comfy-ltx";
+  });
   const image = bundles.filter((b) => (byId[b.id]?.runtime || b.dest) === "comfyui");
+  const video = bundles.filter((b) => byId[b.id]?.runtime === "comfy-ltx");
 
   return (
     <>
@@ -55,6 +59,12 @@ export function Models() {
         <h2>Image</h2>
         <div className="catalog">
           {image.length ? image.map((b) => <BundleRow key={b.id} bundle={b} rec={byId[b.id]} />) : <p className="muted">No image bundles.</p>}
+        </div>
+      </section>
+      <section className="card">
+        <h2>Video</h2>
+        <div className="catalog">
+          {video.length ? video.map((b) => <BundleRow key={b.id} bundle={b} rec={byId[b.id]} />) : <p className="muted">No video bundles.</p>}
         </div>
       </section>
     </>

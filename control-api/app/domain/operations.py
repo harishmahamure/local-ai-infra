@@ -229,6 +229,45 @@ OPERATIONS: dict[str, OperationSpec] = {
         edit_steps=0,
         edit_cfg=0.0,
     ),
+    "generate_devotion_wallpaper": OperationSpec(
+        id="generate_devotion_wallpaper",
+        label="Devotion wallpaper",
+        description="High-quality devotion still for mobile (9:16) or desktop (16:9). Quality render plus 2x upscale by default.",
+        required_bundles=["qwen-image-2512-fp8", "upscalers-esrgan"],
+        default_width=1664,
+        default_height=928,
+    ),
+}
+
+VIDEO_OPERATIONS: dict[str, OperationSpec] = {
+    "generate_live_wallpaper": OperationSpec(
+        id="generate_live_wallpaper",
+        label="Live wallpaper",
+        description="Animate a still into a loop-friendly LTX clip for mobile or landscape video.",
+        required_bundles=["ltx-2.5-distilled", "ltx-2.5-studio"],
+        min_images=1,
+        max_images=1,
+        requires_image=True,
+        reference_slots=("image",),
+        default_width=704,
+        default_height=1216,
+        steps=8,
+        cfg=1.0,
+        edit_steps=8,
+        edit_cfg=1.0,
+    ),
+    "generate_video": OperationSpec(
+        id="generate_video",
+        label="LTX video",
+        description="Text-to-video with LTX 2.5. No start image. Mobile portrait or landscape video.",
+        required_bundles=["ltx-2.5-distilled", "ltx-2.5-studio"],
+        default_width=1216,
+        default_height=704,
+        steps=8,
+        cfg=1.0,
+        edit_steps=8,
+        edit_cfg=1.0,
+    ),
 }
 
 TURNAROUND_VIEWS: tuple[tuple[str, str], ...] = (
@@ -257,6 +296,39 @@ PROP_STANDALONE = (
     "hero product shot of a single prop, centered, studio lighting, seamless neutral background, "
     "no people, no text, no watermark"
 )
+DEVOTION_WALLPAPER_SUFFIX = (
+    "high-quality full-bleed devotion wallpaper, cinematic sacred atmosphere, "
+    "rich material detail, balanced composition with quiet edges, no text, no watermark, "
+    "no UI overlay, no phone frame"
+)
+DEVOTION_WALLPAPER_NEGATIVE = (
+    "blurry, low quality, watermark, text, logo, caption, typography, UI overlay, "
+    "phone bezel, cropped subject, extra limbs, deformed, ugly, junk artifacts"
+)
+LIVE_WALLPAPER_SUFFIX = (
+    "gentle looping ambient motion, slow parallax, living still, seamless loop, "
+    "no camera cut, no morph, no identity change"
+)
+LIVE_WALLPAPER_NEGATIVE = (
+    "blurry, jitter, still frame, hard cuts, watermark, text, logo, morphing, warping, flicker"
+)
+LTX_VIDEO_SUFFIX = (
+    "cinematic motion, continuous shot, natural camera move, rich material detail, "
+    "no text, no watermark, no UI overlay"
+)
+LTX_VIDEO_NEGATIVE = (
+    "blurry, jitter, still frame, hard cuts, watermark, text, logo, morphing, warping, flicker"
+)
+WALLPAPER_TARGETS: dict[str, tuple[int, int]] = {
+    "mobile": (928, 1664),
+    "desktop": (1664, 928),
+}
+LIVE_WALLPAPER_TARGETS: dict[str, tuple[int, int]] = {
+    "mobile": (704, 1216),
+    "video": (1216, 704),
+}
+DEFAULT_LIVE_DURATION = 4.0
+DEFAULT_LIVE_FPS = 24
 SHOT_GRAMMAR = (
     "cinematic production still, {framing} shot, {lens}mm lens, camera at {height}, "
     "consistent character identity from the references, film lighting"
@@ -285,33 +357,70 @@ def resolve_style_preset(value: Any) -> StylePreset:
     return preset
 
 
+def profile_for_operation(operation: str) -> str:
+    from .shots import SHOT_OPERATIONS, profile_for_flow
+
+    if operation in SHOT_OPERATIONS:
+        return profile_for_flow(operation)
+    if operation in VIDEO_OPERATIONS:
+        return "comfy-ltx"
+    return "comfyui"
+
+
 def operation_capabilities() -> dict[str, Any]:
     return {
         "samplers": list(SAMPLERS),
         "schedulers": list(SCHEDULERS),
         "aspects": [dict(item) for item in ASPECTS],
         "stylePresets": [{"id": item.id, "label": item.label} for item in STYLE_PRESETS.values()],
+        "wallpaperTargets": ["mobile", "desktop"],
+    }
+
+
+def video_operation_capabilities() -> dict[str, Any]:
+    return {
+        "targets": ["mobile", "video"],
+        "defaultDuration": DEFAULT_LIVE_DURATION,
+        "defaultFps": DEFAULT_LIVE_FPS,
+        "defaultRefine": True,
+        "maxDuration": 30,
+    }
+
+
+def _catalog_item(spec: OperationSpec) -> dict[str, Any]:
+    edit_only = spec.required_bundles == ["qwen-image-edit-2511-fp8"]
+    return {
+        "id": spec.id,
+        "label": spec.label,
+        "description": spec.description,
+        "requiredBundles": list(spec.required_bundles),
+        "promptRequired": spec.prompt_required,
+        "minImages": spec.min_images,
+        "maxImages": spec.max_images,
+        "requiresMask": spec.requires_mask,
+        "requiresImage": spec.requires_image,
+        "referenceSlots": list(spec.reference_slots),
+        "defaultWidth": spec.default_width,
+        "defaultHeight": spec.default_height,
+        "defaultSteps": spec.edit_steps if edit_only else spec.steps,
+        "defaultCfg": spec.edit_cfg if edit_only else spec.cfg,
+        "defaultShift": DEFAULT_SHIFT,
+        "profile": profile_for_operation(spec.id),
     }
 
 
 def operation_catalog() -> list[dict[str, Any]]:
+    return [{**_catalog_item(spec), "kind": "image"} for spec in OPERATIONS.values()]
+
+
+def video_operation_catalog() -> list[dict[str, Any]]:
     return [
         {
-            "id": spec.id,
-            "label": spec.label,
-            "description": spec.description,
-            "requiredBundles": list(spec.required_bundles),
-            "promptRequired": spec.prompt_required,
-            "minImages": spec.min_images,
-            "maxImages": spec.max_images,
-            "requiresMask": spec.requires_mask,
-            "requiresImage": spec.requires_image,
-            "referenceSlots": list(spec.reference_slots),
-            "defaultWidth": spec.default_width,
-            "defaultHeight": spec.default_height,
-            "defaultSteps": spec.edit_steps if spec.required_bundles == ["qwen-image-edit-2511-fp8"] else spec.steps,
-            "defaultCfg": spec.edit_cfg if spec.required_bundles == ["qwen-image-edit-2511-fp8"] else spec.cfg,
-            "defaultShift": DEFAULT_SHIFT,
+            **_catalog_item(spec),
+            "kind": "video",
+            "defaultDuration": DEFAULT_LIVE_DURATION,
+            "defaultFps": DEFAULT_LIVE_FPS,
+            "defaultRefine": True,
         }
-        for spec in OPERATIONS.values()
+        for spec in VIDEO_OPERATIONS.values()
     ]

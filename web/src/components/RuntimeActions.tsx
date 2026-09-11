@@ -18,6 +18,7 @@ export function RuntimeActions() {
       <button type="button" disabled={busy} onClick={() => load("gemma-4-e4b")}>Load Gemma</button>
       <button type="button" disabled={busy} onClick={() => load("qwen36-35b-a3b-rq")}>Load Qwen3.6</button>
       <button type="button" disabled={busy} onClick={() => load("qwen-image-2512-fp8")}>Load ComfyUI</button>
+      <button type="button" disabled={busy} onClick={() => load("ltx-2.5-distilled")}>Load LTX</button>
       <button type="button" className="danger" disabled={busy} onClick={stop}>Stop all</button>
     </div>
   );

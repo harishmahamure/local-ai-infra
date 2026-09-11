@@ -9,15 +9,20 @@ from ..domain.operations import (
     ATTIRE_STANDALONE,
     DEFAULT_NEGATIVE,
     DEFAULT_SHIFT,
+    DEVOTION_WALLPAPER_NEGATIVE,
+    DEVOTION_WALLPAPER_SUFFIX,
     OPERATIONS,
     PROP_STANDALONE,
     SAMPLERS,
     SCHEDULERS,
     SHOT_GRAMMAR,
     STYLED_OPERATIONS,
+    VIDEO_OPERATIONS,
+    WALLPAPER_TARGETS,
     StylePreset,
     TURNAROUND_VIEWS,
     compose_face_lock,
+    profile_for_operation,
     resolve_style_preset,
 )
 from ..infrastructure.comfy.graphs import MODELS
@@ -58,6 +63,24 @@ class RenderStep:
     shift: float = DEFAULT_SHIFT
     lora_strength: float = 1.0
     control_strength: float = 1.0
+    profile: str = "comfyui"
+    fps: int | None = None
+    duration: float | None = None
+    refine: bool = False
+    video_cfg: float | None = None
+    length: int | None = None
+    guides: list[dict[str, Any]] = field(default_factory=list)
+    control: dict[str, Any] | None = None
+    camera: dict[str, Any] | None = None
+    video_keys: list[str] = field(default_factory=list)
+    post: dict[str, Any] | None = None
+    windowed: bool = False
+    img_compression: int = 2
+    temporal_refine: bool = True
+    clip_device: str = "cpu"
+    unet_name: str | None = None
+    warnings: list[str] = field(default_factory=list)
+    parent_job_id: str | None = None
 
 
 def _seed(body: dict[str, Any]) -> int:
@@ -73,6 +96,22 @@ def _dims(spec, body: dict[str, Any]) -> tuple[int, int]:
     if width < 64 or height < 64 or width > 4096 or height > 4096:
         raise DomainError(ErrorCode.INVALID_PARAMETER, "width and height must be between 64 and 4096")
     return width, height
+
+
+def _wallpaper_dims(spec, body: dict[str, Any]) -> tuple[int, int]:
+    if body.get("width") is not None or body.get("height") is not None:
+        return _dims(spec, body)
+    target = str(body.get("target") or "desktop").strip()
+    if target not in WALLPAPER_TARGETS:
+        raise DomainError(ErrorCode.INVALID_PARAMETER, "target must be mobile or desktop")
+    width, height = WALLPAPER_TARGETS[target]
+    return _dims(spec, {**body, "width": width, "height": height})
+
+
+def _want_upscale(body: dict[str, Any]) -> bool:
+    if "upscale" not in body or body.get("upscale") is None:
+        return True
+    return bool(body.get("upscale"))
 
 
 def _clamp(value: float, lo: float, hi: float, name: str) -> float:
@@ -163,16 +202,40 @@ def _asset_id(value: Any) -> str | None:
 
 def collect_input_refs(body: dict[str, Any]) -> dict[str, str]:
     refs: dict[str, str] = {}
-    for key in ("image", "mask", "character", "attire", "location"):
+    for key in (
+        "image",
+        "mask",
+        "character",
+        "character_b",
+        "attire",
+        "location",
+        "prop",
+        "end_image",
+        "video",
+        "motion",
+        "scene",
+    ):
         asset_id = _asset_id(body.get(key))
         if asset_id:
             refs[key] = asset_id
     extras = body.get("references") or []
     if isinstance(extras, list):
-        for index, item in enumerate(extras[:3]):
+        for index, item in enumerate(extras[:8]):
             asset_id = _asset_id(item)
             if asset_id:
                 refs[f"reference_{index}"] = asset_id
+    keyframes = body.get("keyframes") or []
+    if isinstance(keyframes, list):
+        for index, item in enumerate(keyframes[:12]):
+            asset_id = _asset_id(item)
+            if asset_id:
+                refs[f"keyframe_{index}"] = asset_id
+    clips = body.get("clips") or []
+    if isinstance(clips, list):
+        for index, item in enumerate(clips[:12]):
+            asset_id = _asset_id(item)
+            if asset_id:
+                refs[f"clip_{index}"] = asset_id
     return refs
 
 
@@ -200,7 +263,10 @@ def plan_operation(operation: str, body: dict[str, Any]) -> tuple[list[RenderSte
         raise DomainError(ErrorCode.INVALID_REQUEST, f"{operation} accepts at most {spec.max_images} image(s)")
 
     seed = _seed(body)
-    width, height = _dims(spec, body)
+    if operation == "generate_devotion_wallpaper":
+        width, height = _wallpaper_dims(spec, body)
+    else:
+        width, height = _dims(spec, body)
     adv = _advanced(body)
     bundles = list(spec.required_bundles)
     style = resolve_style_preset(body.get("style_preset") if operation in STYLED_OPERATIONS else "off")
@@ -222,6 +288,7 @@ def plan_operation(operation: str, body: dict[str, Any]) -> tuple[list[RenderSte
             shift=adv.shift,
             lora_strength=adv.lora_strength,
             control_strength=adv.control_strength,
+            profile=profile_for_operation(operation),
             **kwargs,
         )
 
@@ -452,7 +519,48 @@ def plan_operation(operation: str, body: dict[str, Any]) -> tuple[list[RenderSte
             bundles,
         )
 
+    if operation == "generate_devotion_wallpaper":
+        do_upscale = _want_upscale(body)
+        cfg = _steps_cfg(spec, body, mode="txt2img")[1]
+        planned = [
+            step(
+                mode="txt2img",
+                prompt=f"{prompt}. {DEVOTION_WALLPAPER_SUFFIX}",
+                negative_prompt=_negative(body, cfg, extra=DEVOTION_WALLPAPER_NEGATIVE),
+                filename_prefix="devotion_wallpaper",
+                required_nodes=("UNETLoader", "CLIPLoader", "VAELoader", "KSampler", "SaveImage"),
+            )
+        ]
+        wallpaper_bundles = ["qwen-image-2512-fp8"]
+        if do_upscale:
+            wallpaper_bundles.append("upscalers-esrgan")
+            planned.append(
+                step(
+                    mode="upscale",
+                    prompt=prompt,
+                    image_keys=["__previous__"],
+                    upscale_scale=2,
+                    filename_prefix="devotion_wallpaper_hq",
+                    required_nodes=("UpscaleModelLoader", "ImageUpscaleWithModel", "SaveImage"),
+                )
+            )
+        return planned, refs, wallpaper_bundles
+
     raise DomainError(ErrorCode.UNSUPPORTED_OPERATION, f"Unknown operation {operation}")
+
+
+def plan_job(operation: str, body: dict[str, Any]) -> tuple[list[RenderStep], dict[str, str], list[str]]:
+    from ..domain.shots import SHOT_OPERATIONS
+
+    if operation in SHOT_OPERATIONS:
+        from .shot_ops import plan_shot_flow
+
+        return plan_shot_flow(operation, body)
+    if operation in VIDEO_OPERATIONS:
+        from .video_ops import plan_video_operation
+
+        return plan_video_operation(operation, body)
+    return plan_operation(operation, body)
 
 
 def step_to_plan(
@@ -490,10 +598,26 @@ def step_to_plan(
         "shift": step.shift,
         "lora_strength": step.lora_strength,
         "control_strength": step.control_strength,
+        "profile": step.profile,
     }
+    if step.fps is not None:
+        plan["fps"] = step.fps
+    if step.duration is not None:
+        plan["duration"] = step.duration
+    if step.video_cfg is not None:
+        plan["video_cfg"] = step.video_cfg
+    if step.length is not None:
+        plan["length"] = step.length
+    if step.refine:
+        plan["refine"] = True
     if names:
         plan["image_name"] = names[0]
         plan["image_names"] = names
+    named = {key: uploaded[key] for key in list(step.image_keys) + list(step.video_keys) if key in uploaded}
+    if previous_name:
+        named["__previous__"] = previous_name
+    if named:
+        plan["uploaded"] = named
     if step.denoise is not None:
         plan["denoise"] = step.denoise
     if step.mask_key and step.mask_key in uploaded:
@@ -502,4 +626,24 @@ def step_to_plan(
         plan["pad"] = dict(step.pad)
     if step.upscale_scale:
         plan["upscale_scale"] = step.upscale_scale
+    if step.guides:
+        plan["guides"] = list(step.guides)
+    if step.control:
+        plan["control"] = dict(step.control)
+    if step.camera:
+        plan["camera"] = dict(step.camera)
+    if step.video_keys:
+        plan["video_keys"] = list(step.video_keys)
+        plan["video_names"] = [uploaded[key] for key in step.video_keys if key in uploaded]
+    if step.post:
+        plan["post"] = dict(step.post)
+    if step.windowed:
+        plan["windowed"] = True
+    plan["img_compression"] = step.img_compression
+    plan["temporal_refine"] = step.temporal_refine
+    plan["clip_device"] = step.clip_device
+    if step.unet_name:
+        plan["unet_name"] = step.unet_name
+    if step.warnings:
+        plan["warnings"] = list(step.warnings)
     return plan

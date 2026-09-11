@@ -43,6 +43,12 @@ export type Capabilities = {
   schedulers: string[];
   aspects: Aspect[];
   stylePresets?: StylePreset[];
+  wallpaperTargets?: string[];
+  targets?: string[];
+  defaultDuration?: number;
+  defaultFps?: number;
+  defaultRefine?: boolean;
+  maxDuration?: number;
 };
 
 export type Operation = {
@@ -61,6 +67,33 @@ export type Operation = {
   defaultSteps?: number;
   defaultCfg?: number;
   defaultShift?: number;
+  kind?: string;
+  profile?: string;
+  defaultDuration?: number;
+  defaultFps?: number;
+  defaultRefine?: boolean;
+  slots?: FlowSlot[];
+  camera?: boolean;
+  control?: boolean;
+  keyframes?: boolean;
+  parentJob?: boolean;
+  clips?: boolean;
+  action?: boolean;
+};
+
+export type FlowSlot = {
+  id: string;
+  label: string;
+  kind: string;
+  required?: boolean;
+  multiple?: boolean;
+};
+
+export type ShotCapabilities = Capabilities & {
+  cameras?: { id: string; label: string }[];
+  controls?: string[];
+  actions?: string[];
+  preferNvfp4?: boolean;
 };
 
 export type JobError = {
@@ -80,6 +113,7 @@ export type Job = {
   finished_at?: string;
   error?: JobError | null;
   asset_ids?: string[];
+  assets?: { asset_id: string; mime_type?: string }[];
   seed?: number | null;
   inputs?: Record<string, unknown>;
 };

@@ -59,8 +59,8 @@ class CatalogModelRuntime:
         model = self._catalog.models.get(model_id)
         if model is None and model_id not in TEXT_CHAT_MODELS:
             raise DomainError(ErrorCode.MODEL_NOT_AVAILABLE, f"Unknown model {model_id}")
-        if model and model.runtime == "comfyui":
-            return "comfyui"
+        if model and model.runtime in {"comfyui", "comfy-ltx"}:
+            return "comfy-ltx" if model.runtime == "comfy-ltx" else "comfyui"
         return profile_for_text_model(model_id)
 
 

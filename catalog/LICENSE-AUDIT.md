@@ -15,6 +15,7 @@ Downloader **refuses** any model whose `license` field is not listed here.
 | Model / component | License basis | Obligation |
 |-------------------|---------------|------------|
 | `gemma-4-e4b` | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) | Commercial use permitted; prohibited-use policy applies; not Apache-2.0 |
+| `ltx-2.5-distilled`, `ltx-2.5-studio`, `ltx-2.5-nvfp4`, `ltx-2.5-control` | [LTX-2 Community License](https://huggingface.co/Lightricks/LTX-2.5) | Commercial use permitted under LTX-2-Community terms |
 
 ## Blocked (not in catalog)
 
@@ -38,4 +39,8 @@ Image, video, and speech weights on `/data/model_backup` that are not listed in 
 | `qwen-image-2512-lightning-lora` | 4-step Lightning LoRA | Apache-2.0 | fast drafts (`fast=true`) |
 | `qwen-image-edit-2511-fp8` | Qwen-Image-Edit 2511 fp8 + Lightning 4-step LoRA | Apache-2.0 | turnaround, keyframe, shot reference, dress-on, face-lock character, `fast=true` |
 | `qwen-controlnet-diffsynth` | DiffSynth inpaint patch + Lightning LoRA | Apache-2.0 | inpaint / outpaint |
-| `upscalers-esrgan` | RealESRGAN x2 / x4 | MIT | `upscale_asset` |
+| `upscalers-esrgan` | RealESRGAN x2 / x4 | MIT | `upscale_asset`, devotion wallpaper 2x |
+| `ltx-2.5-distilled` | LTX 2.5 distilled | LTX-2-Community | T2V + live wallpaper I2V |
+| `ltx-2.5-studio` | LTX 2.5 distilled + spatial refine | LTX-2-Community | live wallpaper quality refine |
+| `ltx-2.5-nvfp4` | LTX 2.5 distilled nvfp4 transformer | LTX-2-Community | high-quality shot flows without LoRA |
+| `ltx-2.5-control` | LTX 2.3 IC-LoRAs (union / motion-track / dubit) | LTX-2-Community | F06 motion transfer, F08 camera tracks |

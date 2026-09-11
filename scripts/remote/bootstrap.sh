@@ -37,12 +37,11 @@ bash "$CONTROL/scripts/remote/install_systemd_units.sh"
 
 loginctl enable-linger "$USER" 2>/dev/null || true
 
-systemctl --user disable llama-fast.service gemma.service comfyui.service comfyui-ltx.service ai-download.service 2>/dev/null || true
-rm -f "$HOME/.config/systemd/user/comfyui-ltx.service"
+systemctl --user disable llama-fast.service gemma.service comfyui.service comfy-ltx.service ai-download.service 2>/dev/null || true
 systemctl --user daemon-reload
 systemctl --user enable --now ai-control.service
 
 echo "Bootstrap complete."
 echo "Control API: http://${LAN_IP}:8090/ ( /docs + /v1 )"
-echo "GPU inference stays stopped until: ai start gemma|llama-fast|comfyui"
+echo "GPU inference stays stopped until: ai start gemma|llama-fast|comfyui|comfy-ltx"
 echo "Background download: ai download (or POST /v1/downloads)"

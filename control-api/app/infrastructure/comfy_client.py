@@ -93,6 +93,8 @@ class ComfyClient:
             "jpeg": "image/jpeg",
             "webp": "image/webp",
             "gif": "image/gif",
+            "mp4": "video/mp4",
+            "webm": "video/webm",
         }.get(ext, "application/octet-stream")
         return raw, mime
 
@@ -101,6 +103,20 @@ class ComfyClient:
             files = {"image": (filename, io.BytesIO(image_bytes), "application/octet-stream")}
             data = {"overwrite": "true"}
             response = client.post("/upload/image", files=files, data=data)
+            response.raise_for_status()
+            return response.json()
+
+    def upload_video(self, video_bytes: bytes, filename: str) -> dict[str, Any]:
+        mime = "video/mp4" if filename.lower().endswith(".mp4") else "video/webm"
+        with self._client() as client:
+            files = {"image": (filename, io.BytesIO(video_bytes), mime)}
+            data = {"overwrite": "true"}
+            try:
+                response = client.post("/upload/video", files=files, data=data)
+                if response.status_code == 404:
+                    response = client.post("/upload/image", files=files, data=data)
+            except httpx.HTTPError:
+                response = client.post("/upload/image", files=files, data=data)
             response.raise_for_status()
             return response.json()
 

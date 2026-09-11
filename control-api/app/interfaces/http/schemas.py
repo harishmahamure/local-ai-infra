@@ -60,3 +60,69 @@ class ImageJobRequest(BaseModel):
     attire: AssetRef | None = None
     location: AssetRef | None = None
     references: list[AssetRef] = Field(default_factory=list)
+    target: str | None = Field(None, description="mobile or desktop for generate_devotion_wallpaper")
+    upscale: bool | None = Field(None, description="2x RealESRGAN after wallpaper render. Default true.")
+
+
+class VideoJobRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    operation: str
+    prompt: str = ""
+    negative_prompt: str = ""
+    target: str | None = Field(None, description="mobile or video")
+    width: int | None = None
+    height: int | None = None
+    seed: int | None = None
+    steps: int | None = None
+    cfg: float | None = None
+    video_cfg: float | None = None
+    duration: float | None = None
+    fps: int | None = None
+    refine: bool | None = True
+    sampler_name: str | None = None
+    image: AssetRef | None = None
+
+
+class KeyframeRef(BaseModel):
+    asset_id: str
+    frame_idx: int | None = None
+    strength: float | None = None
+
+
+class ShotJobRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    operation: str
+    prompt: str = ""
+    negative_prompt: str = ""
+    target: str | None = None
+    width: int | None = None
+    height: int | None = None
+    seed: int | None = None
+    steps: int | None = None
+    cfg: float | None = None
+    video_cfg: float | None = None
+    duration: float | None = None
+    fps: int | None = None
+    refine: bool | None = True
+    temporal_refine: bool | None = True
+    prefer_nvfp4: bool | None = True
+    quality_lora: bool | None = False
+    sampler_name: str | None = None
+    camera: str | None = None
+    control: str | None = None
+    action: str | None = None
+    control_strength: float | None = None
+    parent_job_id: str | None = None
+    post_mode: str | None = None
+    image: AssetRef | None = None
+    end_image: AssetRef | None = None
+    video: AssetRef | None = None
+    character: AssetRef | None = None
+    character_b: AssetRef | None = None
+    location: AssetRef | None = None
+    prop: AssetRef | None = None
+    keyframes: list[KeyframeRef] = Field(default_factory=list)
+    clips: list[AssetRef] = Field(default_factory=list)
+    references: list[AssetRef] = Field(default_factory=list)

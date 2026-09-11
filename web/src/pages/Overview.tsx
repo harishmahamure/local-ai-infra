@@ -7,7 +7,7 @@ import { RuntimeActions } from "../components/RuntimeActions";
 export function Overview() {
   const { status, jobs } = useStore();
   const recent = jobs.slice(0, 5);
-  const chatReady = status?.loadState === "LOADED" && status.profile !== "comfyui";
+  const chatReady = status?.loadState === "LOADED" && status.profile !== "comfyui" && status.profile !== "comfy-ltx";
 
   return (
     <>
@@ -29,6 +29,13 @@ export function Overview() {
         <p className="muted">
           Queue stills from <Link to="/images">Images</Link>, or <code>POST /v1/image/jobs</code>.
           {" "}Results stay on <Link to="/jobs">Jobs</Link>.
+        </p>
+      </section>
+      <section className="card">
+        <h2>Wallpapers</h2>
+        <p className="muted">
+          Devotion stills, LTX text-to-video, and live wallpapers live under <Link to="/wallpapers">Wallpapers</Link>.
+          {" "}Jobs auto-switch between ComfyUI and LTX.
         </p>
       </section>
       <section className="card">

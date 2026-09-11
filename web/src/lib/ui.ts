@@ -10,6 +10,10 @@ export const GENERATE_OPS = [
   "generate_keyframe",
   "generate_shot_reference",
 ];
+export const WALLPAPER_OPS = ["generate_devotion_wallpaper"];
+export const LIVE_WALLPAPER_OPS = ["generate_live_wallpaper"];
+export const LTX_VIDEO_OPS = ["generate_video"];
+export const SHOT_FLOW_PREFIX = "shot_";
 export const EDIT_OPS = ["inpaint_asset", "outpaint_asset", "upscale_asset"];
 export const STYLED_OPS = [
   "generate_character",
@@ -47,6 +51,14 @@ export const IMAGE_CURL = `curl -X POST /v1/image/jobs \\
   -d '{
     "operation": "generate_prop",
     "prompt": "a brass lantern"
+  }'`;
+
+export const WALLPAPER_CURL = `curl -X POST /v1/image/jobs \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "operation": "generate_devotion_wallpaper",
+    "prompt": "serene temple at dawn",
+    "target": "mobile"
   }'`;
 
 export function badgeClass(state: string | undefined): string {
